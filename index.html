@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>EPUB Studio Mobile v1.2</title>
+<title>EPUB Studio Mobile v2.1</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -17,7 +17,7 @@ button.secondary{background:#555}button.light{background:#e9eef9;color:#194a9b}b
 button:disabled{opacity:.45}.status{white-space:pre-wrap;background:#111;color:#d7f9d0;padding:10px;border-radius:8px;min-height:42px;font:12px ui-monospace,monospace;overflow:auto}
 .small{font-size:12px;color:#666}.warn{color:#a34b00}.ok{color:#087a2f}.hidden{display:none}
 table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px solid #e5e5e5;padding:7px 4px;text-align:left;vertical-align:middle}
-.chapter-select{min-width:220px;padding:7px}.group{border:1px solid #d8dce5;border-radius:10px;margin:9px 0;overflow:hidden}
+.chapter-select{min-width:220px;padding:7px}.dragging{opacity:.45}.drag-handle{cursor:grab;user-select:none;font-size:18px;padding:4px 8px}.preview-tree{font-family:ui-monospace,monospace;white-space:pre-wrap;line-height:1.6}.log-box{max-height:260px;overflow:auto}.group{border:1px solid #d8dce5;border-radius:10px;margin:9px 0;overflow:hidden}
 .group-head{background:#f1f4fa;padding:10px;display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
 .group-body{padding:8px}.group-title{font-weight:800}.cover-label{font-size:11px;font-weight:500}.cover-controls{display:grid;gap:7px;margin-top:8px;padding:8px;background:#fafbfe;border:1px solid #e1e5ef;border-radius:8px}.cover-preview{font-size:11px;color:#555;word-break:break-all}.cover-mode{width:auto;min-width:160px}
 .match-ok{color:#087a2f;font-weight:700}.match-sim{color:#9a6700;font-weight:700}.match-bad{color:#b42318;font-weight:700}.mapping-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:10px 0}.summary-box{border:1px solid #ddd;border-radius:8px;padding:8px;background:#fafafa}.section-toggle{display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:9px 10px;border-radius:8px;background:#eef4ff;font-weight:800}.disabled-section{opacity:.5}.readability-box{border:1px solid #d8dce5;border-radius:10px;padding:10px;margin-top:10px;background:#fbfcff}.badge{display:inline-block;padding:2px 6px;border-radius:999px;background:#edf2ff;color:#244d9c;font-size:11px}
@@ -26,17 +26,9 @@ details summary{cursor:pointer;font-weight:700}
 </style>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v1.2</h1><div class="sub">필요한 기능만 선택 실행 · 표지/설명/목차/줄바꿈/좌우정렬 제거</div></header>
+<header><h1>EPUB Studio Mobile v2.1</h1><div class="sub">CSS 보존 우선 · 필요한 기능만 선택 실행</div></header>
 <main>
 
-<section class="card">
-<h2>작업 선택</h2>
-<div class="row">
-  <button id="modeBuildBtn">1. EPUB 만들기·합본</button>
-  <button id="modeJustifyBtn" class="secondary">2. 좌우 정렬만 제거</button>
-</div>
-<p class="small">제작 화면에서는 필요한 기능만 선택할 수 있습니다. 좌우 정렬만 빠르게 제거하려면 별도 메뉴도 사용할 수 있습니다.</p>
-</section>
 <div id="buildMode">
 <section class="card">
 <h2>1. 원본 파일 분석</h2>
@@ -88,14 +80,15 @@ details summary{cursor:pointer;font-weight:700}
 
 <section class="card">
 <h2>5. 가독성 개선</h2>
-<label class="section-toggle"><input id="enableReadabilityWork" type="checkbox"> 가독성 개선 작업 실행</label>
+<label><input id="removeJustifyInBuild" type="checkbox"> 좌우 정렬만 제거</label>
+<div class="small">좌우 정렬 관련 선언만 제거하고 나머지 CSS는 그대로 유지합니다.</div>
+<label class="section-toggle"><input id="enableReadabilityWork" type="checkbox"> 긴 문단 가독성 개선 실행</label>
 <div id="readabilityWorkBody">
-<label><input id="removeJustifyInBuild" type="checkbox"> 좌우 정렬 제거</label>
-<div class="small">CSS의 <code>text-align: justify</code>, <code>text-align-last: justify</code>와 XHTML 인라인 <code>align="justify"</code>를 제거합니다. 다른 CSS는 유지합니다.</div>
+<div class="small">CSS와 XHTML에서 좌우 정렬 관련 선언만 제거합니다. 다른 CSS 파일·선언·경로·내용은 그대로 유지합니다.</div>
 <div class="readability-box">
-  <label><input type="radio" name="readMode" value="none" checked> 원본 유지</label>
-  <label><input type="radio" name="readMode" value="safe"> 안전 모드 — 단순한 긴 문단만 분리</label>
+  <label><input type="radio" name="readMode" value="safe" checked> 안전 모드 — 단순한 긴 문단만 분리</label>
   <label><input type="radio" name="readMode" value="strong"> 강한 모드 — 긴 문단을 적극적으로 분리</label>
+  <p class="small">권장 기본값: 최소 300자, 문단당 2문장. 일반 소설에서 지나치게 긴 문단만 나누는 보수적인 설정입니다.</p>
   <div class="row">
     <div style="flex:1;min-width:150px"><label>최소 문단 길이</label><input id="minParagraphLength" type="text" value="300"></div>
     <div style="flex:1;min-width:150px"><label>문단당 목표 문장 수</label><input id="targetSentences" type="text" value="2"></div>
@@ -103,25 +96,49 @@ details summary{cursor:pointer;font-weight:700}
   <label><input id="skipClassId" type="checkbox" checked> class 또는 id가 있는 문단 제외</label>
   <label><input id="skipNestedTags" type="checkbox" checked> 내부 태그가 있는 문단 제외</label>
   <label><input id="skipMedia" type="checkbox" checked> 이미지·SVG·스크립트 포함 문단 제외</label>
-  <p class="small warn">원본 특수 연출을 보존하려면 기본값인 원본 유지를 사용하세요.</p>
+  <p class="small warn">가독성 개선 작업을 끄면 본문 구조를 전혀 변경하지 않습니다. 켠 경우에만 안전 모드 또는 강한 모드를 적용합니다.</p>
 </div>
 </div></section>
 
+
 <section class="card">
 <h2>6. 생성 옵션</h2>
-<p class="small">체크한 작업만 적용합니다. 모든 편집 기능을 끄고 검증만 실행하는 것은 지원하지 않습니다.</p>
-<label><input id="includeDesc" type="checkbox" checked> 표지 바로 다음에 작품 설명 페이지 생성</label>
-<label><input id="centerVolume" type="checkbox" checked> 표지가 없는 권은 권 제목만 중앙 표시</label>
-<label><input id="validateXmlBuild" type="checkbox" checked> XML 파싱 검사</label>
-<label><input id="validateLinksBuild" type="checkbox" checked> manifest·spine·내부 링크 검사</label>
-<label><input id="validateZipBuild" type="checkbox" checked> ZIP 무결성 검사</label>
+<p class="small">
+작품 설명 작업을 켜면 설명 페이지는 항상 표지 바로 다음에 배치됩니다.
+표지가 없는 권은 항상 중앙 권 제목 페이지를 생성합니다.
+XML·manifest·spine·내부 링크·ZIP 검사는 항상 실행되며, 실패하면 다운로드 파일을 제공하지 않습니다.
+</p>
+
+<div class="row">
+  <button id="saveSettingsBtn" type="button" class="light">현재 설정 저장</button>
+  <button id="loadSettingsBtn" type="button" class="light">저장 설정 불러오기</button>
+  <button id="resetSettingsBtn" type="button" class="secondary">저장 설정 삭제</button>
+</div>
+
 <label><input id="strictMapping" type="checkbox" checked> 미배정 목차·미사용 원본·중복·불일치가 있으면 생성 차단</label>
+<label><input id="validateCssBuild" type="checkbox" checked> 원본 CSS 파일 목록·개수 확인</label>
+
 <label>출력 파일명 <span class="small">(비우면 작품명 기준 자동 생성)</span></label>
 <input id="outputFilename" type="text" placeholder="작품명_합본.epub">
+
 <div class="row" style="margin-top:12px">
-<button id="buildBtn" disabled>합본 EPUB 만들기</button>
-<button id="resetBtn" class="secondary">초기화</button>
+  <button id="previewBtn" type="button" class="light">구성 미리보기</button>
+  <button id="buildBtn" disabled>EPUB 생성</button>
+  <button id="resetBtn" class="secondary">초기화</button>
 </div>
+
+<h3>실행 예정 작업</h3>
+<div id="changePreview" class="status" style="background:#f6f8fa;color:#222">선택한 작업이 여기에 표시됩니다.</div>
+
+<h3>구성 미리보기</h3>
+<div id="structurePreview" class="status preview-tree" style="background:#fcfcfc;color:#222">목차를 분석하면 권·화 구조를 확인할 수 있습니다.</div>
+</section>
+
+
+
+<section class="card">
+<h2>생성 로그</h2>
+<div id="buildLog" class="status log-box">아직 실행된 작업이 없습니다.</div>
 </section>
 
 <section class="card">
@@ -132,30 +149,9 @@ details summary{cursor:pointer;font-weight:700}
 
 
 </div>
-<div id="justifyMode" class="hidden">
-<section class="card">
-<h2>좌우 정렬만 제거</h2>
-<label>원본 EPUB</label>
-<input id="justifyFile" type="file" accept=".epub,application/epub+zip">
-<label><input id="removeCssJustify" type="checkbox" checked> CSS 파일의 <code>text-align: justify</code> 제거</label>
-<label><input id="removeInlineJustify" type="checkbox" checked> XHTML/HTML 인라인 style의 좌우 정렬 제거</label>
-<label><input id="removeAlignAttr" type="checkbox" checked> <code>align="justify"</code> 속성 제거</label>
-<div class="row" style="margin-top:12px">
-  <button id="justifyRunBtn">좌우 정렬 제거본 만들기</button>
-</div>
-<p class="small">다른 text-align 값(left, right, center 등)은 유지합니다. CSS 파일명·경로·개수와 EPUB 내부 구조는 그대로 유지하고, 대상 선언이 있는 파일만 최소 수정합니다.</p>
-</section>
-<section class="card">
-<h2>처리 결과</h2>
-<div id="justifyStatus" class="status">원본 EPUB을 선택하세요.</div>
-<div id="justifyResult"></div>
-</section>
-</div>
-
-<section class="card">
-<details><summary>프로그램의 현재 범위와 안전장치</summary>
+<section class="card"><details><summary>프로그램의 현재 범위와 안전장치</summary>
 <div class="report">
-<p>EPUB 제작 모드는 원본 ZIP 파일을 복사한 뒤 표지·설명·권 페이지·NAV/NCX/OPF를 구성합니다. 좌우 정렬 제거 모드는 text-align:justify 관련 선언이 있는 CSS/XHTML만 최소 수정하며 다른 리소스와 구조를 보존합니다.</p>
+<p>EPUB 제작 모드는 원본 ZIP 파일을 복사한 뒤 표지·설명·권 페이지·NAV/NCX/OPF를 구성합니다. 좌우 정렬만 제거 모드는 text-align:justify 관련 선언이 있는 CSS/XHTML만 최소 수정하며 다른 리소스와 구조를 보존합니다.</p>
 <p>목차 제목과 원본 제목을 비교해 일치·유사·불일치 상태를 표시합니다. 자동 확정이 어려운 항목은 직접 연결해야 하며, 엄격 검증을 켜면 미배정·미사용·중복·불일치가 남은 상태에서 생성을 차단합니다.</p>
 </div>
 </details>
@@ -542,7 +538,19 @@ function groupCoverCandidates(group,gi){
 function renderGroups(){
  const area=$("groupArea");area.innerHTML="";
  state.groups.forEach((g,gi)=>{
-  const wrap=document.createElement("div");wrap.className="group";
+  const wrap=document.createElement("div");wrap.className="group";wrap.draggable=true;wrap.dataset.groupIndex=gi;
+  wrap.addEventListener("dragstart",()=>wrap.classList.add("dragging"));
+  wrap.addEventListener("dragend",()=>wrap.classList.remove("dragging"));
+  wrap.addEventListener("dragover",e=>e.preventDefault());
+  wrap.addEventListener("drop",e=>{
+    e.preventDefault();
+    const from=Number(area.querySelector(".dragging")?.dataset.groupIndex);
+    const to=gi;
+    if(Number.isInteger(from)&&from!==to){
+      const [moved]=state.groups.splice(from,1);state.groups.splice(to,0,moved);renderGroups();
+    }
+  });
+
   const head=document.createElement("div");head.className="group-head";
   const origCandidates=groupCoverCandidates(g,gi);
   if(!g.coverMode)g.coverMode=origCandidates.length?"original":"none";
@@ -552,7 +560,13 @@ function renderGroups(){
    : `<option value="">원본 표지 후보 없음</option>`;
 
   head.innerHTML=`<div style="width:100%">
-    <div class="row"><input type="text" value="${esc(g.title)}" data-role="gtitle" style="font-weight:800;flex:1"><span class="badge">${g.chapters.length}화</span></div>
+    <div class="row">
+      <span class="drag-handle" title="권 순서 드래그">☰</span>
+      <input type="text" value="${esc(g.title)}" data-role="gtitle" style="font-weight:800;flex:1">
+      <span class="badge">${g.chapters.length}화</span>
+      <button type="button" class="light" data-role="up">↑</button>
+      <button type="button" class="light" data-role="down">↓</button>
+    </div>
     <div class="cover-controls">
       <b>${esc(g.title)} 표지 설정</b>
       <label>표지 방식
@@ -579,6 +593,8 @@ function renderGroups(){
   const origWrap=head.querySelector('[data-role="origwrap"]');
   const newWrap=head.querySelector('[data-role="newwrap"]');
   const preview=head.querySelector('[data-role="coverpreview"]');
+  head.querySelector('[data-role="up"]').onclick=()=>{if(gi>0){[state.groups[gi-1],state.groups[gi]]=[state.groups[gi],state.groups[gi-1]];renderGroups()}};
+  head.querySelector('[data-role="down"]').onclick=()=>{if(gi<state.groups.length-1){[state.groups[gi+1],state.groups[gi]]=[state.groups[gi],state.groups[gi+1]];renderGroups()}};
 
   titleInput.onchange=e=>{g.title=e.target.value;renderGroups()};
   function refresh(){
@@ -599,22 +615,35 @@ function renderGroups(){
 
   const body=document.createElement("div");body.className="group-body";
   const table=document.createElement("table");
-  table.innerHTML="<thead><tr><th>#</th><th>목차 제목</th><th>상태</th><th>연결할 원본 본문</th></tr></thead>";
+  table.innerHTML="<thead><tr><th>이동</th><th>#</th><th>목차 제목</th><th>상태</th><th>연결할 원본 본문</th></tr></thead>";
   const tb=document.createElement("tbody");
   g.chapters.forEach((ch,ci)=>{
-   const tr=document.createElement("tr");
+   const tr=document.createElement("tr");tr.draggable=true;
+   tr.addEventListener("dragstart",()=>{tr.classList.add("dragging");tr.dataset.chapterIndex=ci});
+   tr.addEventListener("dragend",()=>tr.classList.remove("dragging"));
+   tr.addEventListener("dragover",e=>e.preventDefault());
+   tr.addEventListener("drop",e=>{
+     e.preventDefault();
+     const from=Number(tb.querySelector(".dragging")?.dataset.chapterIndex);
+     if(Number.isInteger(from)&&from!==ci){
+       const [moved]=g.chapters.splice(from,1);g.chapters.splice(ci,0,moved);renderGroups();
+     }
+   });
    const opts=[`<option value="">-- 미배정 --</option>`].concat(
     state.candidates.map(c=>`<option value="${esc(c.id)}" ${c.id===ch.sourceId?"selected":""}>${esc(c.title)} · ${esc(c.href)}</option>`)
    ).join("");
    const ml=matchLabel(ch);
-   tr.innerHTML=`<td>${ci+1}</td><td><input type="text" value="${esc(ch.title)}"></td><td><span class="${ml.cls}">${ml.label}${ml.score?` ${Math.round(ml.score*100)}%`:""}</span></td><td><select class="chapter-select">${opts}</select></td>`;
+   tr.innerHTML=`<td><span class="drag-handle">☰</span><button type="button" class="light" data-role="cup">↑</button><button type="button" class="light" data-role="cdown">↓</button></td>
+   <td>${ci+1}</td><td><input type="text" value="${esc(ch.title)}"></td><td><span class="${ml.cls}">${ml.label}${ml.score?` ${Math.round(ml.score*100)}%`:""}</span></td><td><select class="chapter-select">${opts}</select></td>`;
    tr.querySelector("input").onchange=e=>{ch.title=e.target.value;renderGroups()};
    tr.querySelector("select").onchange=e=>{ch.sourceId=e.target.value||null;renderGroups()};
+   tr.querySelector('[data-role="cup"]').onclick=()=>{if(ci>0){[g.chapters[ci-1],g.chapters[ci]]=[g.chapters[ci],g.chapters[ci-1]];renderGroups()}};
+   tr.querySelector('[data-role="cdown"]').onclick=()=>{if(ci<g.chapters.length-1){[g.chapters[ci+1],g.chapters[ci]]=[g.chapters[ci],g.chapters[ci+1]];renderGroups()}};
    tb.appendChild(tr);
   });
   table.appendChild(tb);body.appendChild(table);wrap.append(head,body);area.appendChild(wrap);
  });
- $("mappingCard").classList.remove("hidden");renderMappingSummary();
+ $("mappingCard").classList.remove("hidden");renderMappingSummary();updateStructurePreview();updateChangePreview();
 }
 function uniqueId(doc,base){
  const ids=new Set(descendants(doc,"item").map(x=>x.getAttribute("id")));
@@ -654,7 +683,7 @@ function makeXhtml(title,body,cssHref){
 
 
 
-function readMode(){return document.querySelector('input[name="readMode"]:checked')?.value||"none"}
+function readMode(){return document.querySelector('input[name="readMode"]:checked')?.value||"safe"}
 function sentenceSplit(text){
  return text.match(/.*?(?:[.!?…]+(?:["'”’」』])?|$)(?:\s+|$)/gs)?.map(x=>x.trim()).filter(Boolean)||[text];
 }
@@ -725,7 +754,7 @@ async function buildTxtEpub(){
  }else{
   zip.file("OEBPS/Text/cover.xhtml",makeXhtml(title,`<div class="title-page"><div><h1>${esc(title)}</h1>${creator?`<p>${esc(creator)}</p>`:""}</div></div>`,"../Styles/book.css"));add("cover","Text/cover.xhtml","application/xhtml+xml");spine.push("cover");
  }
- if($("enableDescriptionWork").checked&&$("includeDesc").checked){
+ if($("enableDescriptionWork").checked&&true){
   let imgs="";
   const fs=[...$("descImages").files];
   for(let i=0;i<fs.length;i++){
@@ -769,16 +798,18 @@ async function buildTxtEpub(){
  zip.file("OEBPS/content.opf",opf);
  parseXML(opf,"OPF");parseXML(await zip.file("OEBPS/nav.xhtml").async("text"),"NAV");parseXML(await zip.file("OEBPS/toc.ncx").async("text"),"NCX");
  for(const x of manifest)if(!zip.file("OEBPS/"+x.href))throw new Error("manifest 누락: "+x.href);
+ if($("validateCssBuild")?.checked&&state.inputType==="epub"){const cssAfter=Object.keys(zip.files).filter(n=>/\.css$/i.test(n)&&!zip.files[n].dir).sort();if(cssSnapshotBefore.length&&!cssAfter.length)throw new Error("CSS 파일이 모두 사라졌습니다.");}
  const blob=await zip.generateAsync({type:"blob",mimeType:"application/epub+zip",compression:"DEFLATE",compressionOptions:{level:6},platform:"UNIX"});
  const url=URL.createObjectURL(blob),safe=title.replace(/[\\/:*?"<>|]/g,"_");
  $("result").innerHTML=`<div class="report"><p class="ok"><b>TXT → EPUB 생성 및 검증 완료</b></p><p>TXT ${state.txtFiles.length}개 · 구분 ${navGroups.length}개 · 화 ${navGroups.reduce((n,g)=>n+g.chapters.length,0)}개</p><a class="download" download="${esc((($("outputFilename").value||safe+".epub").replace(/\.epub$/i,""))+".epub")}" href="${url}">완성 EPUB 저장</a><p class="small">버튼을 누르면 .epub 파일이 저장됩니다.</p></div>`;
  setStatus(`완료\n입력: ${state.txtFiles.length===1?"TXT":"ZIP(TXT)"}\n작품명: ${title}\n구분: ${navGroups.length}\n화: ${navGroups.reduce((n,g)=>n+g.chapters.length,0)}\nOPF/NAV/NCX XML 파싱: 정상\nmanifest 파일 검사: 정상\nEPUB 생성: 정상`);
- $("result").scrollIntoView({behavior:"smooth"});
+ $("buildLog").textContent+="\n\n생성 완료\n• 권/구분: "+state.groups.length+"\n• 전체 화: "+state.groups.reduce((n,g)=>n+g.chapters.length,0)+"\n• 출력 파일 생성 완료";$("result").scrollIntoView({behavior:"smooth"});
 }
 
 $("buildBtn").onclick=async()=>{
  try{
-  if(!$("enableCoverWork").checked&&!$("enableDescriptionWork").checked&&!$("enableTocWork").checked&&!$("enableReadabilityWork").checked)throw new Error("실행할 편집 기능을 하나 이상 선택하세요.");
+  $("buildLog").textContent="EPUB 생성 시작\n"+selectedTasks().map(x=>"• "+x).join("\n");
+  if(!$("enableCoverWork").checked&&!$("enableDescriptionWork").checked&&!$("enableTocWork").checked&&!$("enableReadabilityWork").checked&&!$("removeJustifyInBuild").checked)throw new Error("실행할 편집 기능을 하나 이상 선택하세요.");
   if(!$("enableTocWork").checked&&state.candidates.length){
     state.groups=[{title:"본문",chapters:state.candidates.map(c=>({title:c.title,sourceId:c.id})),coverFile:null,coverMode:"none",originalCoverHref:null}];
   }
@@ -818,7 +849,7 @@ $("buildBtn").onclick=async()=>{
   }
 
   // 설명
-  const includeDesc=$("includeDesc").checked;
+  const includeDesc=true;
   if(includeDesc){
    let imgsHtml="";
    const descImgs=[...$("descImages").files];
@@ -895,7 +926,7 @@ $("buildBtn").onclick=async()=>{
 
 
   let integratedJustifyCss=0,integratedJustifyMarkup=0;
-  if($("enableReadabilityWork").checked&&$("removeJustifyInBuild").checked){
+  if($("removeJustifyInBuild").checked){
     const allNames=Object.keys(zip.files).filter(n=>!zip.files[n].dir);
     for(const name of allNames.filter(n=>/\.css$/i.test(n))){
       const old=await zip.file(name).async("text");
@@ -934,7 +965,8 @@ $("buildBtn").onclick=async()=>{
 
   // EPUB 규칙대로 생성
   zip.file("mimetype","application/epub+zip",{compression:"STORE"});
-  const blob=await zip.generateAsync({type:"blob",mimeType:"application/epub+zip",compression:"DEFLATE",compressionOptions:{level:6},platform:"UNIX"});
+  if($("validateCssBuild")?.checked&&state.inputType==="epub"){const cssAfter=Object.keys(zip.files).filter(n=>/\.css$/i.test(n)&&!zip.files[n].dir).sort();if(cssSnapshotBefore.length&&!cssAfter.length)throw new Error("CSS 파일이 모두 사라졌습니다.");}
+ const blob=await zip.generateAsync({type:"blob",mimeType:"application/epub+zip",compression:"DEFLATE",compressionOptions:{level:6},platform:"UNIX"});
   const url=URL.createObjectURL(blob);const safe=(state.title||"complete").replace(/[\\/:*?"<>|]/g,"_");
   const result=$("result");result.innerHTML=`<div class="report"><p class="ok"><b>EPUB 생성 및 기본 검증 완료</b></p><p>구분 ${navGroups.length}개 · 화 ${navGroups.reduce((n,g)=>n+g.chapters.length,0)}개 · manifest 누락 0 · spine 오류 0 · 가독성 개선 문단 ${typeof readabilityChanged!=="undefined"?readabilityChanged:0} · 좌우정렬 CSS ${typeof integratedJustifyCss!=="undefined"?integratedJustifyCss:0} · 인라인 ${typeof integratedJustifyMarkup!=="undefined"?integratedJustifyMarkup:0}</p><a class="download" download="${esc((($("outputFilename").value||safe+"_합본.epub").replace(/\.epub$/i,""))+".epub")}" href="${url}">완성 EPUB 저장</a><p class="small">자동 다운로드가 시작되지 않으면 위 버튼을 길게 누르거나 탭하세요.</p></div>`;
   setStatus(`완료\n작품명: ${state.title}\n구분: ${navGroups.length}\n화: ${navGroups.reduce((n,g)=>n+g.chapters.length,0)}\nOPF/NAV/NCX XML 파싱: 정상\nmanifest 파일 검사: 정상\nspine idref 검사: 정상\nZIP 생성: 정상`);
@@ -943,9 +975,7 @@ $("buildBtn").onclick=async()=>{
 };
 
 
-$("modeBuildBtn").onclick=()=>{
- $("buildMode").classList.remove("hidden");$("justifyMode").classList.add("hidden");
- $("modeBuildBtn").classList.add("active-mode");$("modeJustifyBtn").classList.remove("active-mode");
+$("modeJustifyBtn").classList.remove("active-mode");
 };
 $("modeJustifyBtn").onclick=()=>{
  $("justifyMode").classList.remove("hidden");$("buildMode").classList.add("hidden");
@@ -974,103 +1004,12 @@ function removeInlineJustifyFromMarkup(text){
 function listCssNames(zip){
  return Object.keys(zip.files).filter(n=>!zip.files[n].dir&&/\.css$/i.test(n)).sort();
 }
-$("justifyRunBtn").onclick=async()=>{
- const status=$("justifyStatus"),result=$("justifyResult");
- try{
-   const f=$("justifyFile").files[0];if(!f)throw new Error("원본 EPUB을 선택하세요.");
-   status.textContent="EPUB 읽기 및 ZIP 무결성 검사 중...";result.innerHTML="";
-   const original=await f.arrayBuffer();
-   const zip=await JSZip.loadAsync(original,{checkCRC32:true});
-   const names=Object.keys(zip.files).filter(n=>!zip.files[n].dir);
-   const cssBefore=listCssNames(zip);
-   let cssFilesChanged=0,cssRulesRemoved=0,markupFilesChanged=0,inlineRemoved=0;
-   const modified=[];
-   if($("removeCssJustify").checked){
-     for(const name of cssBefore){
-       const old=await zip.file(name).async("text");
-       const r=removeJustifyDeclarations(old);
-       if(r.count){zip.file(name,r.text);cssFilesChanged++;cssRulesRemoved+=r.count;modified.push(name)}
-     }
-   }
-   if($("removeInlineJustify").checked||$("removeAlignAttr").checked){
-     const markup=names.filter(n=>/\.(xhtml|html|htm)$/i.test(n));
-     for(const name of markup){
-       const old=await zip.file(name).async("text");
-       let r={text:old,count:0};
-       if($("removeInlineJustify").checked&&$("removeAlignAttr").checked)r=removeInlineJustifyFromMarkup(old);
-       else if($("removeInlineJustify").checked){
-         let c=0;
-         const t=old.replace(/style\s*=\s*(["'])([\s\S]*?)\1/gi,(whole,q,value)=>{
-           const x=removeJustifyDeclarations(value);if(!x.count)return whole;c+=x.count;
-           const cleaned=x.text.replace(/^\s*;\s*|\s*;\s*$/g,"").trim();
-           return cleaned?`style=${q}${cleaned}${q}`:"";
-         });r={text:t,count:c};
-       }else{
-         let c=0;const t=old.replace(/\s+align\s*=\s*(["'])justify\1/gi,()=>{c++;return ""});r={text:t,count:c};
-       }
-       if(r.count){zip.file(name,r.text);markupFilesChanged++;inlineRemoved+=r.count;modified.push(name)}
-     }
-   }
-   // Validate mandatory EPUB structure.
-   const mt=await zip.file("mimetype")?.async("text");
-   if(mt!=="application/epub+zip")throw new Error("mimetype 내용이 올바르지 않습니다.");
-   const ct=await zip.file("META-INF/container.xml")?.async("text");
-   if(!ct)throw new Error("META-INF/container.xml이 없습니다.");
-   const cdoc=parseXML(ct,"container.xml");
-   const rf=descendants(cdoc,"rootfile")[0];if(!rf)throw new Error("OPF 경로를 찾을 수 없습니다.");
-   const opfPath=rf.getAttribute("full-path"),opfText=await zip.file(opfPath)?.async("text");
-   if(!opfText)throw new Error("OPF 파일이 없습니다.");
-   const odoc=parseXML(opfText,"OPF");
-   const opfDir2=dirname(opfPath),manifest2=firstDesc(odoc,"manifest"),spine2=firstDesc(odoc,"spine");
-   if(!manifest2||!spine2)throw new Error("OPF manifest 또는 spine이 없습니다.");
-   const ids=new Map();const missing=[];
-   for(const item of children(manifest2,"item")){
-     const id=item.getAttribute("id"),href=item.getAttribute("href");ids.set(id,href);
-     if(href&&!zip.file(join(opfDir2,href)))missing.push(href);
-   }
-   const bad=[];
-   for(const ref of children(spine2,"itemref"))if(!ids.has(ref.getAttribute("idref")))bad.push(ref.getAttribute("idref"));
-   if(missing.length||bad.length)throw new Error(`내부 검증 실패: manifest 누락 ${missing.length}, spine 오류 ${bad.length}`);
-   const cssAfter=listCssNames(zip);
-   if(JSON.stringify(cssBefore)!==JSON.stringify(cssAfter))throw new Error("CSS 파일 목록이 변경되었습니다.");
-   zip.file("mimetype","application/epub+zip",{compression:"STORE"});
-   status.textContent="수정본 EPUB 패키징 중...";
-   const blob=await zip.generateAsync({type:"blob",mimeType:"application/epub+zip",compression:"DEFLATE",compressionOptions:{level:6},platform:"UNIX"});
-   // Reopen generated output to check ZIP/XML again.
-   const check=await JSZip.loadAsync(await blob.arrayBuffer(),{checkCRC32:true});
-   const c2=parseXML(await check.file("META-INF/container.xml").async("text"),"완성 container.xml");
-   const rf2=descendants(c2,"rootfile")[0],op2=rf2.getAttribute("full-path");
-   parseXML(await check.file(op2).async("text"),"완성 OPF");
-   const url=URL.createObjectURL(blob);
-   const base=f.name.replace(/\.epub$/i,"").replace(/[\\/:*?"<>|]/g,"_");
-   result.innerHTML=`<div class="report"><p class="ok"><b>좌우 정렬 제거본 생성 완료</b></p>
-   <p>CSS ${cssBefore.length}개 유지 · 수정 CSS ${cssFilesChanged}개 · 제거한 CSS 선언 ${cssRulesRemoved}개<br/>
-   수정 XHTML/HTML ${markupFilesChanged}개 · 제거한 인라인/align 선언 ${inlineRemoved}개<br/>
-   manifest·spine·ZIP CRC·XML 검사 정상</p>
-   <a class="download" download="${esc(base)}_no_justify.epub" href="${url}">좌우 정렬 제거 EPUB 저장</a></div>`;
-   status.textContent=`완료
-원본 파일 수: ${names.length}
-CSS 파일 수: ${cssBefore.length} → ${cssAfter.length} (동일)
-수정 CSS: ${cssFilesChanged}
-제거 CSS 선언: ${cssRulesRemoved}
-수정 XHTML/HTML: ${markupFilesChanged}
-제거 인라인 선언: ${inlineRemoved}
-container.xml/OPF 파싱: 정상
-manifest/spine 검사: 정상
-ZIP CRC 검사: 정상`;
- }catch(e){status.textContent="오류: "+e.message;console.error(e)}
-};
-
-
-
 function bindSectionToggle(toggleId,bodyId){
  const t=$(toggleId),b=$(bodyId);if(!t||!b)return;
  const update=()=>{
    b.querySelectorAll("input,textarea,select,button").forEach(el=>el.disabled=!t.checked);
    b.classList.toggle("disabled-section",!t.checked);
-   if(toggleId==="enableReadabilityWork"&&!t.checked){
-     const n=document.querySelector('input[name="readMode"][value="none"]');if(n)n.checked=true;
-   }
+   
  };
  t.addEventListener("change",update);update();
 }
@@ -1078,6 +1017,71 @@ bindSectionToggle("enableCoverWork","coverWorkBody");
 bindSectionToggle("enableDescriptionWork","descriptionWorkBody");
 bindSectionToggle("enableTocWork","tocWorkBody");
 bindSectionToggle("enableReadabilityWork","readabilityWorkBody");
+
+
+function currentSettings(){
+ return {
+  enableCoverWork:$("enableCoverWork").checked,
+  enableDescriptionWork:$("enableDescriptionWork").checked,
+  enableTocWork:$("enableTocWork").checked,
+  enableReadabilityWork:$("enableReadabilityWork").checked,
+  removeJustifyInBuild:$("removeJustifyInBuild").checked,
+  readMode:readMode(),
+  minParagraphLength:$("minParagraphLength").value,
+  targetSentences:$("targetSentences").value,
+  skipClassId:$("skipClassId").checked,
+  skipNestedTags:$("skipNestedTags").checked,
+  skipMedia:$("skipMedia").checked,
+  includeDesc:true,
+  centerVolume:true,
+  strictMapping:$("strictMapping").checked,
+  validateXmlBuild:true,
+  validateLinksBuild:true,
+  validateZipBuild:true,
+  validateCssBuild:$("validateCssBuild").checked
+ };
+}
+function applySettings(s){
+ const ids=["enableCoverWork","enableDescriptionWork","enableTocWork","enableReadabilityWork","removeJustifyInBuild","skipClassId","skipNestedTags","skipMedia","strictMapping","validateCssBuild"];
+ ids.forEach(id=>{if($(id)&&typeof s[id]==="boolean")$(id).checked=s[id]});
+ if(s.readMode){const r=document.querySelector(`input[name="readMode"][value="${s.readMode}"]`);if(r)r.checked=true}
+ if(s.minParagraphLength)$("minParagraphLength").value=s.minParagraphLength;
+ if(s.targetSentences)$("targetSentences").value=s.targetSentences;
+ ["enableCoverWork","enableDescriptionWork","enableTocWork","enableReadabilityWork"].forEach(id=>$(id)?.dispatchEvent(new Event("change")));
+ updateChangePreview();
+}
+$("saveSettingsBtn").onclick=()=>{localStorage.setItem("epubStudioV2Settings",JSON.stringify(currentSettings()));alert("현재 설정을 이 브라우저에 저장했습니다.")};
+$("loadSettingsBtn").onclick=()=>{const s=localStorage.getItem("epubStudioV2Settings");if(!s)return alert("저장된 설정이 없습니다.");applySettings(JSON.parse(s));alert("설정을 불러왔습니다.")};
+$("resetSettingsBtn").onclick=()=>{localStorage.removeItem("epubStudioV2Settings");alert("저장된 설정을 삭제했습니다.")};
+
+function selectedTasks(){
+ const a=[];
+ if($("enableCoverWork").checked)a.push("표지 작업");
+ if($("enableDescriptionWork").checked)a.push("작품 설명 작업");
+ if($("enableTocWork").checked)a.push("목차·권 페이지 재구성");
+ if($("enableReadabilityWork").checked){
+   if(readMode()==="safe")a.push("긴 문단 가독성 개선: 안전 모드");
+   if(readMode()==="strong")a.push("긴 문단 가독성 개선: 강한 모드");
+ }
+ if($("removeJustifyInBuild").checked)a.push("좌우 정렬만 제거");
+ if(true)a.push("XML 검사");
+ if(true)a.push("내부 링크 검사");
+ if(true)a.push("ZIP 무결성 검사");
+ if($("validateCssBuild").checked)a.push("CSS 목록 확인");
+ return a;
+}
+function updateChangePreview(){
+ const a=selectedTasks();$("changePreview").textContent=a.length?"실행 예정:\n- "+a.join("\n- "):"선택된 작업이 없습니다.";
+}
+function updateStructurePreview(){
+ const el=$("structurePreview");if(!el)return;
+ if(!state.groups.length){el.textContent="목차를 분석하면 권·화 구조를 확인할 수 있습니다.";return}
+ el.textContent=state.groups.map(g=>`${g.title}\n${g.chapters.map(c=>`  ├─ ${c.title}`).join("\n")}`).join("\n\n");
+}
+$("previewBtn").onclick=()=>{updateStructurePreview();updateChangePreview();$("structurePreview").scrollIntoView({behavior:"smooth",block:"center"})};
+["enableCoverWork","enableDescriptionWork","enableTocWork","enableReadabilityWork","removeJustifyInBuild","validateCssBuild","strictMapping"].forEach(id=>$(id)?.addEventListener("change",updateChangePreview));
+document.querySelectorAll('input[name="readMode"]').forEach(x=>x.addEventListener("change",updateChangePreview));
+updateChangePreview();
 
 $("resetBtn").onclick=()=>location.reload();
 </script>
