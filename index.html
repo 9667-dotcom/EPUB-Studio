@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>EPUB Studio Mobile v5.3.1</title>
+<title>EPUB Studio Mobile v6.0</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -72,7 +72,7 @@ window.addEventListener("unhandledrejection",function(e){
 </script>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v5.3.1</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본</div></header>
+<header><h1>EPUB Studio Mobile v6.0</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본</div></header>
 <main>
 
 <div id="buildMode">
@@ -138,7 +138,7 @@ window.addEventListener("unhandledrejection",function(e){
 <textarea id="tocText" placeholder="1권&#10;1화&#10;2화&#10;&#10;2권&#10;3화&#10;4화&#10;&#10;[권] 외전&#10;외전 1화"></textarea>
 <p class="small">
 상위 권을 직접 지정하려면 <code>[권] 1권</code>, <code>[권] 외전</code>처럼 입력하세요.
-권 표시 없이 화 제목만 입력하면 현재 권 구조를 유지하면서 화 제목만 순서대로 적용합니다. 권별 본문을 새로 나누려면 `[권] 1권` 형식으로 상위 권을 함께 입력하세요.
+권 표시 없이 장 제목만 입력하면 원본 권 구조를 유지하면서 같은 기본 제목의 上·中·下, 상·중·하, 전편·후편, Part 조각을 모두 찾아 각 원본 권에 자동 배정합니다. 권별 본문을 새로 나누려면 `[권] 1권` 형식으로 상위 권을 함께 입력하세요.
 목차 입력칸이 비어 있으면 <b>원본 목차로 자동 구성</b>을 사용하세요.
 </p>
 <div class="row" style="margin-top:8px">
@@ -289,8 +289,8 @@ XML·manifest·spine·내부 링크·ZIP 검사는 항상 실행되며, 실패�
 <div id="cleanupSummary" class="status">원본 분석 후 삭제·중복 제외 예정 항목이 표시됩니다.</div>
 <label><input id="validateCssBuild" type="checkbox" checked> 원본 CSS 파일 목록·개수 확인</label>
 
-<label>출력 파일명 <span class="small">(비우면 작품명 기준 자동 생성)</span></label>
-<input id="outputFilename" type="text" placeholder="작품명_합본.epub">
+<label>출력 파일명 <span class="small">(기본: [작가명]작품명_.epub, 직접 수정 가능)</span></label>
+<input id="outputFilename" type="text" placeholder="[작가명]작품명_.epub">
 
 <div class="row" style="margin-top:12px">
   <button id="previewBtn" type="button" class="light">구성 미리보기</button>
@@ -367,6 +367,36 @@ function cleanBookTitleFromFilename(title){
   .replace(/\s+외전(?:\s*\d+)?\s*$/i,"")
   .replace(/\s+/g," ").trim();
 }
+
+function sanitizeDownloadPart(value){
+ return String(value||"")
+  .normalize("NFC")
+  .replace(/[\\/:*?"<>|\u0000-\u001f]/g,"")
+  .replace(/\s+/g," ")
+  .trim();
+}
+function defaultOutputFilename(){
+ const title=sanitizeDownloadPart($("bookTitle")?.value||state?.title||"작품");
+ const creator=sanitizeDownloadPart($("bookCreator")?.value||state?.creator||"");
+ return `${creator?`[${creator}]`:""}${title}_.epub`;
+}
+function resolvedOutputFilename(){
+ const entered=sanitizeDownloadPart(($("outputFilename")?.value||"").replace(/\.epub$/i,""));
+ if(entered)return entered+".epub";
+ return defaultOutputFilename();
+}
+function refreshDefaultOutputFilename(force=false){
+ const field=$("outputFilename");
+ if(!field)return;
+ const old=field.dataset.autoValue||"";
+ const current=field.value.trim();
+ const next=defaultOutputFilename();
+ if(force||!current||current===old){
+  field.value=next;
+  field.dataset.autoValue=next;
+ }
+}
+
 function parseAuthorTitleFromFilename(name){
  const base=stripKnownExtension(name);
  const m=base.match(/^\s*\[([^\]]+)\]\s*(.+?)\s*$/);
@@ -543,6 +573,82 @@ function renderMappingSummary(){
  <div class="summary-box match-bad">중복<br><b>${s.duplicate}</b></div>`;
 }
 
+
+function baseChapterTitle(title){
+ return normalizeEmbeddedHeading(
+  String(title||"")
+   .normalize("NFKC")
+   .replace(/\s*(?:上|中|下|상|중|하)\s*$/i,"")
+   .replace(/\s*(?:전편|후편|전|후)\s*$/i,"")
+   .replace(/\s*(?:part|파트)\s*[-_.:]?\s*\d+\s*$/i,"")
+   .replace(/\s*\(\s*(?:상|중|하|전편|후편|part\s*\d+)\s*\)\s*$/i,"")
+ );
+}
+function splitSuffixRank(title){
+ const s=String(title||"").trim();
+ const patterns=[
+  [/(?:上|상|\b전편\b)\s*$/i,1],
+  [/(?:中|중)\s*$/i,2],
+  [/(?:下|하|\b후편\b)\s*$/i,3],
+  [/(?:part|파트)\s*[-_.:]?\s*(\d+)\s*$/i,null]
+ ];
+ for(const [p,rank] of patterns){
+  const m=s.match(p);
+  if(m)return rank??(10+Number(m[1]||0));
+ }
+ return 0;
+}
+function originalGroupTitleForCandidate(candidate){
+ if(candidate?.sourceVolume)return candidate.sourceVolume;
+ for(const g of state.groups||[]){
+  if(g.chapters?.some(ch=>ch.sourceId===candidate?.id))return g.title;
+ }
+ return "본문";
+}
+function expandFlatTocIntoOriginalVolumes(lines){
+ const sourceCandidates=[...(state.candidates||[])].sort((a,b)=>(a.index??0)-(b.index??0));
+ const groupOrder=[];
+ for(const g of state.groups||[])if(!groupOrder.includes(g.title))groupOrder.push(g.title);
+ for(const c of sourceCandidates){
+  const gt=originalGroupTitleForCandidate(c);
+  if(!groupOrder.includes(gt))groupOrder.push(gt);
+ }
+ const groupMap=new Map(groupOrder.map(title=>[title,{
+  title,chapters:[],coverFile:null,coverMode:"none",originalCoverHref:null
+ }]));
+ const logs=[],unmatched=[];
+ const used=new Set();
+
+ for(const requested of lines){
+  const base=baseChapterTitle(requested);
+  let matches=sourceCandidates.filter(c=>!used.has(c.id)&&baseChapterTitle(c.title)===base);
+  if(!matches.length){
+   matches=sourceCandidates.filter(c=>!used.has(c.id)&&improvedMatchScore(requested,c)>=0.82);
+  }
+  matches.sort((a,b)=>{
+   const ga=groupOrder.indexOf(originalGroupTitleForCandidate(a));
+   const gb=groupOrder.indexOf(originalGroupTitleForCandidate(b));
+   return ga-gb || splitSuffixRank(a.title)-splitSuffixRank(b.title) || (a.index??0)-(b.index??0);
+  });
+  if(!matches.length){
+   unmatched.push(requested);
+   logs.push(`미배정: ${requested}`);
+   continue;
+  }
+  for(const c of matches){
+   used.add(c.id);
+   const gt=originalGroupTitleForCandidate(c);
+   if(!groupMap.has(gt))groupMap.set(gt,{title:gt,chapters:[],coverFile:null,coverMode:"none",originalCoverHref:null});
+   groupMap.get(gt).chapters.push({title:c.title||requested,sourceId:c.id,requestedTitle:requested});
+  }
+  logs.push(`${requested} → ${matches.map(c=>`${originalGroupTitleForCandidate(c)} / ${c.title}`).join(" + ")}`);
+ }
+ if(unmatched.length){
+  groupMap.set("미배정",{title:"미배정",chapters:unmatched.map(title=>({title,sourceId:null})),coverFile:null,coverMode:"none",originalCoverHref:null});
+ }
+ return {groups:[...groupMap.values()].filter(g=>g.chapters.length),logs,unmatched,expandedCount:used.size};
+}
+
 function parseToc(text){
  const lines=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
  let groups=[],cur=null;
@@ -553,18 +659,63 @@ function parseToc(text){
  return groups.filter(g=>g.chapters.length||g.title!=="본문");
 }
 
+function normalizeDescriptionText(text){
+ return String(text||"")
+  .normalize("NFC")
+  .replace(/\r\n?/g,"\n")
+  .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g,"")
+  .replace(/\u00a0/g," ")
+  .replace(/[ \t]+\n/g,"\n")
+  .replace(/\n[ \t]+/g,"\n")
+  .replace(/\n{4,}/g,"\n\n\n")
+  .trim();
+}
+function descriptionLabelInfo(line){
+ const m=String(line||"").trim().match(/^(작품\s*소개|BL\s*가이드|배경\s*\/?\s*분야|작품\s*키워드|키워드|공|수|서브공|이럴\s*때\s*보세요|공감\s*글귀|분량\s*안내)\s*[:：]?\s*(.*)$/i);
+ if(!m)return null;
+ return {label:m[1].replace(/\s+/g," ").trim(),rest:m[2].trim()};
+}
+function descriptionTextToHtml(text){
+ const normalized=normalizeDescriptionText(text);
+ if(!normalized)return "";
+ const lines=normalized.split("\n");
+ const out=[];
+ let paragraph=[];
+ const flush=()=>{
+  if(!paragraph.length)return;
+  out.push(`<p>${paragraph.map(x=>esc(x)).join("<br/>")}</p>`);
+  paragraph=[];
+ };
+ for(const raw of lines){
+  const line=raw.trim();
+  if(!line){flush();continue}
+  const label=descriptionLabelInfo(line);
+  if(label){
+   flush();
+   out.push(`<h3>${esc(label.label)}</h3>`);
+   if(label.rest)out.push(`<p>${esc(label.rest)}</p>`);
+   continue;
+  }
+  paragraph.push(raw.trim());
+ }
+ flush();
+ return out.join("");
+}
 function descriptionSectionsHtml(){
- const intro=cleanDescription($("workIntro").value).trim();
- const guide=cleanDescription($("blGuide").value).trim();
- const extra=cleanDescription($("descText").value).trim();
+ const intro=normalizeDescriptionText(cleanDescription($("workIntro").value));
+ const guide=normalizeDescriptionText(cleanDescription($("blGuide").value));
+ const extra=normalizeDescriptionText(cleanDescription($("descText").value));
  const parts=[];
- if(intro)parts.push(`<section class="hm-desc-section"><h1>작품 소개</h1>${textToParas(intro)}</section>`);
- if(guide)parts.push(`<section class="hm-desc-section"><h1>BL 가이드</h1>${textToParas(guide)}</section>`);
- if(extra)parts.push(`<section class="hm-desc-section">${textToParas(extra)}</section>`);
+ if(intro)parts.push(`<section class="hm-desc-section"><h2>작품 소개</h2><div class="hm-desc-content">${descriptionTextToHtml(intro)}</div></section>`);
+ if(guide)parts.push(`<section class="hm-desc-section"><h2>BL 가이드</h2><div class="hm-desc-content">${descriptionTextToHtml(guide)}</div></section>`);
+ if(extra)parts.push(`<section class="hm-desc-section hm-desc-extra"><h2>작품 정보</h2><div class="hm-desc-content">${descriptionTextToHtml(extra)}</div></section>`);
  return parts.join("");
 }
 function textToParas(text){
- return String(text||"").split(/\n{2,}/).map(x=>x.trim()).filter(Boolean).map(x=>`<p>${esc(x).replace(/\n/g,"<br/>")}</p>`).join("");
+ return descriptionTextToHtml(text);
+}
+function descriptionHtml(text){
+ return descriptionTextToHtml(text);
 }
 
 function cleanDescription(text){
@@ -1138,7 +1289,7 @@ async function analyzeEpubCollectionFiles(entries,outerName){
   coverCandidates:[],sourceCoverByGroup:new Map(),manualGrouping:false,
   epubUnits:units,cleanupRemoved,dedupRemoved,mixedTxtFiles:[]
  };
- $("bookTitle").value=title;$("bookCreator").value=creator;
+ $("bookTitle").value=title;$("bookCreator").value=creator;refreshDefaultOutputFilename(true);
  $("fileInfo").textContent=`${title} · EPUB ${units.length}권 · 본문 후보 ${candidates.length}개`;
  $("applyTocBtn").disabled=false;$("autoOriginalBtn").disabled=false;$("buildBtn").disabled=true;
  state.groups=units.map(unit=>({
@@ -1442,13 +1593,18 @@ $("applyTocBtn").onclick=()=>{
   const hasExplicitGroup=lines.some(x=>groupHeading(x));
 
   if(!hasExplicitGroup&&state.groups.length){
-   const chapters=state.groups.flatMap(g=>g.chapters);
-   if(lines.length!==chapters.length){
-    throw new Error(`화 제목 수가 기존 화 수와 다릅니다. 입력 ${lines.length}개 / 기존 ${chapters.length}개. 권을 새로 나누려면 [권] 표시를 사용하세요.`);
-   }
-   lines.forEach((title,i)=>chapters[i].title=title);
-   renderGroups();$("buildBtn").disabled=false;
-   setStatus(`화 제목 적용 완료\n기존 권 구조 유지: ${state.groups.length}개\n화 제목: ${lines.length}개`);
+   const result=expandFlatTocIntoOriginalVolumes(lines);
+   state.groups=result.groups;
+   state.manualGrouping=true;
+   renderGroups();
+   $("buildBtn").disabled=result.unmatched.length>0;
+   setStatus(`장 목차를 원본 권에 자동 배정 완료
+입력 장 제목: ${lines.length}개
+실제 연결 조각: ${result.expandedCount}개
+최종 권/구분: ${state.groups.length}개
+미배정: ${result.unmatched.length}개
+
+${result.logs.join("\n")}`);
    return;
   }
 
@@ -1653,7 +1809,8 @@ function loadProjectObject(p){
 }
 function scheduleAutosave(){
  clearTimeout(autosaveTimer);
- autosaveTimer=setTimeout(()=>{
+ autosaveTimer=refreshDefaultOutputFilename(false);
+setTimeout(()=>{
   try{
    const lightweight=projectData();
    localStorage.setItem("epubStudioV3Autosave",JSON.stringify(lightweight));
@@ -1732,7 +1889,7 @@ function makeGenerationReport(extra={}){
  const chapterCount=state.groups.reduce((n,g)=>n+g.chapters.length,0);
  const issues=analyzeProjectIssues();
  const lines=[
-  `EPUB Studio Mobile v5.3.1 생성 리포트`,
+  `EPUB Studio Mobile v6.0 생성 리포트`,
   `작품명: ${$("bookTitle").value.trim()}`,
   `작가명: ${$("bookCreator").value.trim()||"(없음)"}`,
   `권/구분: ${state.groups.length}개`,
@@ -1866,7 +2023,7 @@ function safeFixProjectIssues(){
  renderGroups();
  return removed;
 }
-function renderV5Preview(){
+function renderV6Preview(){
  const structure=$("finalStructurePreview"),report=$("autoIssueReport");
  if(!structure||!report)return;
  if(!state.groups.length){
@@ -1882,7 +2039,7 @@ function renderV5Preview(){
 
 function buildProjectSnapshot(){
  return {
-  version:"4.0",title:$("bookTitle").value.trim(),creator:$("bookCreator").value.trim(),
+  version:"6.0",title:$("bookTitle").value.trim(),creator:$("bookCreator").value.trim(),
   groups:state.groups.map(g=>({title:String(g.title||"").trim(),coverMode:g.coverMode||"none",originalCoverHref:g.originalCoverHref||null,chapters:g.chapters.map(projectChapterFromUi)})),
   options:{cover:$("enableCoverWork").checked,description:$("enableDescriptionWork").checked,toc:$("enableTocWork").checked,readability:$("enableReadabilityWork").checked,removeJustify:$("removeJustifyInBuild").checked,strict:$("strictMapping").checked}
  };
@@ -2093,7 +2250,7 @@ function renderGroups(){
     ch.title=e.target.value;
     const status=tr.querySelector("[data-role='titleSaved']");
     if(status)status.textContent="저장됨";
-    updateStructurePreview();renderMobileTree();updatePreflight();renderV5Preview();scheduleAutosave();
+    updateStructurePreview();renderMobileTree();updatePreflight();renderV6Preview();scheduleAutosave();
    };
    tr.querySelector("input").onblur=()=>renderGroups();
    tr.querySelector("select").onchange=e=>{ch.sourceId=e.target.value||null;renderGroups()};
@@ -2108,7 +2265,7 @@ function renderGroups(){
   });
   table.appendChild(tb);body.appendChild(table);wrap.append(head,body);area.appendChild(wrap);
  });
- $("mappingCard").classList.remove("hidden");renderMappingSummary();updateStructurePreview();updateChangePreview();renderMobileTree();updatePreflight();renderV5Preview();scheduleAutosave();
+ $("mappingCard").classList.remove("hidden");renderMappingSummary();updateStructurePreview();updateChangePreview();renderMobileTree();updatePreflight();renderV6Preview();scheduleAutosave();
 }
 function uniqueId(doc,base){
  const ids=new Set(descendants(doc,"item").map(x=>x.getAttribute("id")));
@@ -2252,7 +2409,7 @@ async function buildEpubCollection(){
   const body=imageTags.join("")+descriptionSectionsHtml();
   if(body){
    const href="Text/description.xhtml";
-   zip.file("OEBPS/"+href,makeXhtml("작품 설명",body,"../Styles/hm_builder.css"));
+   zip.file("OEBPS/"+href,makeXhtml("작품 설명",body,"../Styles/hm_builder.css","hm-desc"));
    spineIds.push(add("description",href,"application/xhtml+xml"));
   }
  }
@@ -2306,7 +2463,7 @@ async function buildEpubCollection(){
  setBuildProgress(92,"EPUB 묶음을 최종 패키징합니다.");
  const blob=await zip.generateAsync({type:"blob",mimeType:"application/epub+zip",compression:"DEFLATE",compressionOptions:{level:6},platform:"UNIX"});
  const url=URL.createObjectURL(blob),safe=title.replace(/[\\/:*?"<>|]/g,"_");
- const filename=(($("outputFilename").value||safe+".epub").replace(/\.epub$/i,""))+".epub";
+ const filename=resolvedOutputFilename();
  $("result").innerHTML=`<div class="report"><p class="ok"><b>EPUB 묶음 합본 생성 완료</b></p><p>원본 EPUB ${state.epubUnits.length}개 · 추가 TXT ${(state.mixedTxtFiles||[]).length}개 · 권 ${navGroups.length}개 · 화 ${navGroups.reduce((n,g)=>n+g.chapters.length,0)}개</p><a class="download" download="${esc(filename)}" href="${url}">완성 EPUB 저장</a></div>`;
  setStatus(`완료\n입력 EPUB: ${state.epubUnits.length}개\n권/구분: ${navGroups.length}개\n화: ${navGroups.reduce((n,g)=>n+g.chapters.length,0)}개\n원본 리소스 격리 복사: 정상\nOPF/NAV/NCX: 정상\nmanifest·spine: 정상\nZIP 생성: 정상`);
  showComparisonReport({xml:"정상",links:"정상",zip:"정상"});
@@ -2324,7 +2481,7 @@ async function buildTxtEpub(){
  const zip=new JSZip();
  zip.file("mimetype","application/epub+zip",{compression:"STORE"});
  zip.file("META-INF/container.xml",`<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`);
- const css=`html,body{margin:0;padding:0}body{line-height:1.8;word-break:keep-all;padding:1.2em}p{margin:.65em 0;text-indent:1em}h1,h2{text-indent:0}.title-page,.cover-page{display:flex;min-height:94vh;align-items:center;justify-content:center;text-align:center;padding:0}.cover-page img,.hm-desc-section{margin:1.5em 0}.hm-desc-section h1{font-size:1.25em;margin:1.2em 0 .7em}.desc-img{display:block;max-width:100%;height:auto;margin:0 auto}.hm-desc-section{margin:1.5em 0}.hm-desc-section h1{font-size:1.25em;margin:1.2em 0 .7em}.desc-img{margin-bottom:1.2em}.desc h2{font-size:1.25em;margin-top:1.5em}.chapter-title{margin:0 0 1.2em;text-align:center}`;
+ const css=`html,body{margin:0;padding:0}body{line-height:1.8;word-break:keep-all;padding:1.2em}p{margin:.65em 0;text-indent:1em}h1,h2{text-indent:0}.title-page,.cover-page{display:flex;min-height:94vh;align-items:center;justify-content:center;text-align:center;padding:0}.cover-page img,body.hm-desc{padding:1.35em;line-height:1.85;word-break:keep-all;overflow-wrap:anywhere}.hm-desc-section{margin:0 0 2.2em;padding:0 0 1.5em;border-bottom:1px solid #d9d9d9}.hm-desc-section:last-child{border-bottom:0}.hm-desc-section h2{font-size:1.55em;line-height:1.35;text-align:center;margin:.4em 0 1.15em;padding-bottom:.55em;border-bottom:2px solid currentColor}.hm-desc-section h3{font-size:1.12em;line-height:1.45;margin:1.35em 0 .45em}.hm-desc-content p{margin:.75em 0;text-indent:0;white-space:normal}.desc-img{display:block;max-width:100%;height:auto;margin:0 auto}body.hm-desc{padding:1.35em;line-height:1.85;word-break:keep-all;overflow-wrap:anywhere}.hm-desc-section{margin:0 0 2.2em;padding:0 0 1.5em;border-bottom:1px solid #d9d9d9}.hm-desc-section:last-child{border-bottom:0}.hm-desc-section h2{font-size:1.55em;line-height:1.35;text-align:center;margin:.4em 0 1.15em;padding-bottom:.55em;border-bottom:2px solid currentColor}.hm-desc-section h3{font-size:1.12em;line-height:1.45;margin:1.35em 0 .45em}.hm-desc-content p{margin:.75em 0;text-indent:0;white-space:normal}.desc-img{margin-bottom:1.2em}.desc h2{font-size:1.25em;margin-top:1.5em}.chapter-title{margin:0 0 1.2em;text-align:center}`;
  zip.file("OEBPS/Styles/book.css",css);
  const manifest=[],spine=[],navGroups=[];let manifestNo=0;
  const add=(id,href,media,props="")=>manifest.push({id,href,media,props});
@@ -2385,7 +2542,7 @@ async function buildTxtEpub(){
  if($("validateCssBuild")?.checked&&state.inputType==="epub"){const cssAfter=Object.keys(zip.files).filter(n=>/\.css$/i.test(n)&&!zip.files[n].dir).sort();if(cssSnapshotBefore.length&&!cssAfter.length)throw new Error("CSS 파일이 모두 사라졌습니다.");}
  $("buildLog").textContent+="\n[7/8] EPUB ZIP 패키징";setBuildProgress(92,"EPUB ZIP 파일을 패키징합니다.");const blob=await zip.generateAsync({type:"blob",mimeType:"application/epub+zip",compression:"DEFLATE",compressionOptions:{level:6},platform:"UNIX"});
  const url=URL.createObjectURL(blob),safe=title.replace(/[\\/:*?"<>|]/g,"_");
- $("result").innerHTML=`<div class="report"><p class="ok"><b>TXT → EPUB 생성 및 검증 완료</b></p><p>TXT ${state.txtFiles.length}개 · 구분 ${navGroups.length}개 · 화 ${navGroups.reduce((n,g)=>n+g.chapters.length,0)}개</p><a class="download" download="${esc((($("outputFilename").value||safe+".epub").replace(/\.epub$/i,""))+".epub")}" href="${url}">완성 EPUB 저장</a><p class="small">버튼을 누르면 .epub 파일이 저장됩니다.</p></div>`;
+ $("result").innerHTML=`<div class="report"><p class="ok"><b>TXT → EPUB 생성 및 검증 완료</b></p><p>TXT ${state.txtFiles.length}개 · 구분 ${navGroups.length}개 · 화 ${navGroups.reduce((n,g)=>n+g.chapters.length,0)}개</p><a class="download" download="${esc(resolvedOutputFilename())}" href="${url}">완성 EPUB 저장</a><p class="small">버튼을 누르면 .epub 파일이 저장됩니다.</p></div>`;
  setStatus(`완료\n입력: ${state.txtFiles.length===1?"TXT":"ZIP(TXT)"}\n작품명: ${title}\n구분: ${navGroups.length}\n화: ${navGroups.reduce((n,g)=>n+g.chapters.length,0)}\nOPF/NAV/NCX XML 파싱: 정상\nmanifest 파일 검사: 정상\nEPUB 생성: 정상`);
  $("buildLog").textContent+="\n\n원본/생성 비교\n• 원본 CSS: "+compareResultSummary().originalCss+"개\n• 원본 spine: "+compareResultSummary().originalXhtml+"개\n• 최종 권: "+compareResultSummary().groups+"개\n• 최종 화: "+compareResultSummary().chapters+"개\n\n생성 완료\n• 권/구분: "+state.groups.length+"\n• 전체 화: "+state.groups.reduce((n,g)=>n+g.chapters.length,0)+"\n• 출력 파일 생성 완료";$("result").scrollIntoView({behavior:"smooth"});
 }
@@ -2421,7 +2578,7 @@ $("buildBtn").onclick=async()=>{
   const opf=parseXML(await zip.file(state.opfPath).async("text"),"OPF");
   const manifestEl=firstDesc(opf,"manifest"),spineEl=firstDesc(opf,"spine"),metadataEl=firstDesc(opf,"metadata");
   const base="HMBuilder/"; const cssHref=base+"hm_builder.css"; const cssFull=join(state.opfDir,cssHref);
-  zip.file(cssFull,`html,body{margin:0;padding:0}body.hm-title{display:flex;min-height:95vh;align-items:center;justify-content:center;text-align:center}h1{font-size:2em}body.hm-desc{padding:1.2em;line-height:1.75}body.hm-desc h2{font-size:1.25em;margin:1.5em 0 .6em}body.hm-desc p{margin:.45em 0}.hm-desc-section{margin:1.5em 0}.hm-desc-section h1{font-size:1.25em;margin:1.2em 0 .7em}.hm-img{display:block;max-width:100%;height:auto;margin:0 auto 1.2em}.hm-cover{display:flex;min-height:98vh;align-items:center;justify-content:center}.hm-cover img{display:block;max-width:100%;max-height:98vh;width:auto;height:auto}`);
+  zip.file(cssFull,`html,body{margin:0;padding:0}body.hm-title{display:flex;min-height:95vh;align-items:center;justify-content:center;text-align:center}h1{font-size:2em}body.hm-desc{padding:1.35em;line-height:1.85;word-break:keep-all;overflow-wrap:anywhere}.hm-desc-section{margin:0 0 2.2em;padding:0 0 1.5em;border-bottom:1px solid #d9d9d9}.hm-desc-section:last-child{border-bottom:0}.hm-desc-section h2{font-size:1.55em;line-height:1.35;text-align:center;margin:.4em 0 1.15em;padding-bottom:.55em;border-bottom:2px solid currentColor}.hm-desc-section h3{font-size:1.12em;line-height:1.45;margin:1.35em 0 .45em}.hm-desc-content p{margin:.75em 0;text-indent:0;white-space:normal}.hm-img{display:block;max-width:100%;height:auto;margin:0 auto 1.2em}.hm-cover{display:flex;min-height:98vh;align-items:center;justify-content:center}.hm-cover img{display:block;max-width:100%;max-height:98vh;width:auto;height:auto}`);
   const cssId=uniqueId(opf,"hm_css");addManifestItem(opf,manifestEl,cssId,cssHref,"text/css");
 
   let newSpine=[];
@@ -2457,7 +2614,7 @@ $("buildBtn").onclick=async()=>{
    }
    const desc=descriptionSectionsHtml();
    const href=base+"hm_description.xhtml";
-   zip.file(join(state.opfDir,href),makeXhtml("작품 설명",imgsHtml+descriptionHtml(desc),"hm_builder.css"));
+   zip.file(join(state.opfDir,href),makeXhtml("작품 설명",imgsHtml+descriptionHtml(desc),"hm_builder.css","hm-desc"));
    const id=uniqueId(opf,"hm_description");addManifestItem(opf,manifestEl,id,href,"application/xhtml+xml");newSpine.push(id);
   }
 
@@ -2566,7 +2723,7 @@ $("buildBtn").onclick=async()=>{
   if($("validateCssBuild")?.checked&&state.inputType==="epub"){const cssAfter=Object.keys(zip.files).filter(n=>/\.css$/i.test(n)&&!zip.files[n].dir).sort();if(cssSnapshotBefore.length&&!cssAfter.length)throw new Error("CSS 파일이 모두 사라졌습니다.");}
  $("buildLog").textContent+="\n[7/8] EPUB ZIP 패키징";setBuildProgress(92,"EPUB ZIP 파일을 패키징합니다.");const blob=await zip.generateAsync({type:"blob",mimeType:"application/epub+zip",compression:"DEFLATE",compressionOptions:{level:6},platform:"UNIX"});
   const url=URL.createObjectURL(blob);const safe=(state.title||"complete").replace(/[\\/:*?"<>|]/g,"_");
-  const result=$("result");result.innerHTML=`<div class="report"><p class="ok"><b>EPUB 생성 및 기본 검증 완료</b></p><p>구분 ${navGroups.length}개 · 화 ${navGroups.reduce((n,g)=>n+g.chapters.length,0)}개 · manifest 누락 0 · spine 오류 0 · 가독성 개선 문단 ${typeof readabilityChanged!=="undefined"?readabilityChanged:0} · 좌우정렬 CSS ${typeof integratedJustifyCss!=="undefined"?integratedJustifyCss:0} · 인라인 ${typeof integratedJustifyMarkup!=="undefined"?integratedJustifyMarkup:0}</p><a class="download" download="${esc((($("outputFilename").value||safe+"_합본.epub").replace(/\.epub$/i,""))+".epub")}" href="${url}">완성 EPUB 저장</a><p class="small">자동 다운로드가 시작되지 않으면 위 버튼을 길게 누르거나 탭하세요.</p></div>`;
+  const result=$("result");result.innerHTML=`<div class="report"><p class="ok"><b>EPUB 생성 및 기본 검증 완료</b></p><p>구분 ${navGroups.length}개 · 화 ${navGroups.reduce((n,g)=>n+g.chapters.length,0)}개 · manifest 누락 0 · spine 오류 0 · 가독성 개선 문단 ${typeof readabilityChanged!=="undefined"?readabilityChanged:0} · 좌우정렬 CSS ${typeof integratedJustifyCss!=="undefined"?integratedJustifyCss:0} · 인라인 ${typeof integratedJustifyMarkup!=="undefined"?integratedJustifyMarkup:0}</p><a class="download" download="${esc(resolvedOutputFilename())}" href="${url}">완성 EPUB 저장</a><p class="small">자동 다운로드가 시작되지 않으면 위 버튼을 길게 누르거나 탭하세요.</p></div>`;
   setStatus(`완료\n작품명: ${state.title}\n구분: ${navGroups.length}\n화: ${navGroups.reduce((n,g)=>n+g.chapters.length,0)}\nOPF/NAV/NCX XML 파싱: 정상\nmanifest 파일 검사: 정상\nspine idref 검사: 정상\nZIP 생성: 정상`);
   result.scrollIntoView({behavior:"smooth"});
   $("buildLog").textContent+="\n[8/8] 생성 완료";showComparisonReport({xml:"정상",links:"정상",zip:"정상"});finishBuildProgress("EPUB 파일이 생성되었습니다. 결과 영역의 저장 버튼을 누르세요.");
@@ -2767,7 +2924,7 @@ window.addEventListener("unhandledrejection",e=>{if(!$("buildProgressOverlay").c
 $("applySafeFixesBtn").onclick=()=>{
  const removed=safeFixProjectIssues();
  setStatus(removed.length?`안전한 수정 ${removed.length}개 적용\n`+removed.join("\n"):"자동 적용 가능한 안전한 수정이 없습니다.");
- renderV5Preview();updatePreflight();
+ renderV6Preview();updatePreflight();
 };
 $("downloadReportBtn").onclick=downloadGenerationReport;
 
@@ -2775,6 +2932,13 @@ document.addEventListener("click",e=>{
  const a=e.target.closest?.("a.download");if(!a)return;
  $("buildProgressOverlay")?.classList.add("hidden");
  setStatus("EPUB 저장을 시작합니다. 브라우저 다운로드 목록을 확인하세요.");
+});
+
+
+$("bookTitle").addEventListener("input",()=>refreshDefaultOutputFilename(false));
+$("bookCreator").addEventListener("input",()=>refreshDefaultOutputFilename(false));
+$("outputFilename").addEventListener("input",e=>{
+ if(e.target.value.trim()!==e.target.dataset.autoValue)e.target.dataset.autoValue="";
 });
 
 $("resetBtn").onclick=()=>location.reload();
