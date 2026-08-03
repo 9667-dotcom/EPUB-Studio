@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>EPUB Studio Mobile v5.3</title>
+<title>EPUB Studio Mobile v5.3.1</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -72,7 +72,7 @@ window.addEventListener("unhandledrejection",function(e){
 </script>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v5.3</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본</div></header>
+<header><h1>EPUB Studio Mobile v5.3.1</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본</div></header>
 <main>
 
 <div id="buildMode">
@@ -1732,7 +1732,7 @@ function makeGenerationReport(extra={}){
  const chapterCount=state.groups.reduce((n,g)=>n+g.chapters.length,0);
  const issues=analyzeProjectIssues();
  const lines=[
-  `EPUB Studio Mobile v5.3 생성 리포트`,
+  `EPUB Studio Mobile v5.3.1 생성 리포트`,
   `작품명: ${$("bookTitle").value.trim()}`,
   `작가명: ${$("bookCreator").value.trim()||"(없음)"}`,
   `권/구분: ${state.groups.length}개`,
@@ -1933,6 +1933,10 @@ function showBuildError(error){
 function finishBuildProgress(message){
  $("buildProgressBar").value=100;$("buildProgressTitle").textContent="EPUB 생성 완료";
  $("buildProgressMessage").textContent=message||"다운로드 파일을 생성했습니다.";$("closeBuildProgressBtn").classList.remove("hidden");
+ setTimeout(()=>{
+  $("buildProgressOverlay").classList.add("hidden");
+  const result=$("result");if(result)result.scrollIntoView({behavior:"smooth",block:"start"});
+ },700);
 }
 
 function chapterSource(ch){
@@ -2746,6 +2750,8 @@ window.addEventListener("DOMContentLoaded",()=>{
  $("mobileAutoTocBtn").onclick=()=>$("autoOriginalBtn").click();
  $("mobilePreviewBtn").onclick=()=>{$("mobileEditorCard").classList.remove("hidden");$("mobileEditorCard").scrollIntoView({behavior:"smooth"})};
  $("mobileBuildBtn").onclick=()=>{const btn=$("buildBtn");if(btn.disabled){showBuildError(new Error("EPUB 생성 버튼이 아직 활성화되지 않았습니다. 원본 분석과 목차 구성을 먼저 완료하세요."));return}btn.click()};
+ $("closeBuildProgressBtn").onclick=()=>$("buildProgressOverlay").classList.add("hidden");
+ $("buildProgressOverlay").addEventListener("click",e=>{if(e.target===$("buildProgressOverlay"))$("buildProgressOverlay").classList.add("hidden")});
  });
 
 window.addEventListener("beforeunload",scheduleAutosave);
@@ -2764,6 +2770,12 @@ $("applySafeFixesBtn").onclick=()=>{
  renderV5Preview();updatePreflight();
 };
 $("downloadReportBtn").onclick=downloadGenerationReport;
+
+document.addEventListener("click",e=>{
+ const a=e.target.closest?.("a.download");if(!a)return;
+ $("buildProgressOverlay")?.classList.add("hidden");
+ setStatus("EPUB 저장을 시작합니다. 브라우저 다운로드 목록을 확인하세요.");
+});
 
 $("resetBtn").onclick=()=>location.reload();
 </script>
