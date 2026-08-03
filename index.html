@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>EPUB Studio Mobile v2.3</title>
+<title>EPUB Studio Mobile v2.5</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -17,7 +17,7 @@ button.secondary{background:#555}button.light{background:#e9eef9;color:#194a9b}b
 button:disabled{opacity:.45}.status{white-space:pre-wrap;background:#111;color:#d7f9d0;padding:10px;border-radius:8px;min-height:42px;font:12px ui-monospace,monospace;overflow:auto}
 .small{font-size:12px;color:#666}.warn{color:#a34b00}.ok{color:#087a2f}.hidden{display:none}
 table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px solid #e5e5e5;padding:7px 4px;text-align:left;vertical-align:middle}
-.chapter-select{min-width:220px;padding:7px}.dragging{opacity:.45}.drag-handle{cursor:grab;user-select:none;font-size:18px;padding:4px 8px}.preview-tree{font-family:ui-monospace,monospace;white-space:pre-wrap;line-height:1.6}.log-box{max-height:260px;overflow:auto}.group{border:1px solid #d8dce5;border-radius:10px;margin:9px 0;overflow:hidden}
+.chapter-select{min-width:220px;padding:7px}.dragging{opacity:.45}.drag-handle{cursor:grab;user-select:none;font-size:18px;padding:4px 8px}.candidate-row{display:grid;grid-template-columns:70px 1fr 150px;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid #eee}.candidate-row code{word-break:break-all}.preview-tree{font-family:ui-monospace,monospace;white-space:pre-wrap;line-height:1.6}.log-box{max-height:260px;overflow:auto}.group{border:1px solid #d8dce5;border-radius:10px;margin:9px 0;overflow:hidden}
 .group-head{background:#f1f4fa;padding:10px;display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
 .group-body{padding:8px}.group-title{font-weight:800}.cover-label{font-size:11px;font-weight:500}.cover-controls{display:grid;gap:7px;margin-top:8px;padding:8px;background:#fafbfe;border:1px solid #e1e5ef;border-radius:8px}.cover-preview{font-size:11px;color:#555;word-break:break-all}.cover-mode{width:auto;min-width:160px}
 .match-ok{color:#087a2f;font-weight:700}.match-sim{color:#9a6700;font-weight:700}.match-bad{color:#b42318;font-weight:700}.mapping-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:10px 0}.summary-box{border:1px solid #ddd;border-radius:8px;padding:8px;background:#fafafa}.section-toggle{display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:9px 10px;border-radius:8px;background:#eef4ff;font-weight:800}.disabled-section{opacity:.5}.readability-box{border:1px solid #d8dce5;border-radius:10px;padding:10px;margin-top:10px;background:#fbfcff}.badge{display:inline-block;padding:2px 6px;border-radius:999px;background:#edf2ff;color:#244d9c;font-size:11px}
@@ -36,7 +36,7 @@ window.addEventListener("unhandledrejection",function(e){
 </script>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v2.3</h1><div class="sub">CSS 보존 우선 · 필요한 기능만 선택 실행</div></header>
+<header><h1>EPUB Studio Mobile v2.5</h1><div class="sub">CSS 보존 우선 · 필요한 기능만 선택 실행</div></header>
 <main>
 
 <div id="buildMode">
@@ -76,14 +76,45 @@ window.addEventListener("unhandledrejection",function(e){
 </div></section>
 
 <section class="card">
-<h2>4. 목차 붙여넣기</h2><label class="section-toggle"><input id="enableTocWork" type="checkbox" checked> 목차·권 페이지 재구성 실행</label><div id="tocWorkBody">
+<h2>4. 목차 붙여넣기</h2>
+<div class="readability-box" style="margin-bottom:12px">
+  <b>TXT 화 인식 방식</b>
+  <label><input type="radio" name="txtDetectMode" value="auto" checked> 자동 감지</label>
+  <label><input type="radio" name="txtDetectMode" value="hash"> #번호만 <span class="small">예: #1, #25</span></label>
+  <label><input type="radio" name="txtDetectMode" value="numhwa"> 번호화만 <span class="small">예: 1화, 25화</span></label>
+  <label><input type="radio" name="txtDetectMode" value="jenumhwa"> 제번호화만 <span class="small">예: 제1화, 제25화</span></label>
+  <label><input type="radio" name="txtDetectMode" value="chapter"> Chapter만 <span class="small">예: Chapter 1</span></label>
+  <label><input type="radio" name="txtDetectMode" value="custom"> 직접 입력한 정규식</label>
+  <input id="customDetectPattern" type="text" placeholder="예: ^EP\\d+$">
+  <label><input id="includeSpecialTitles" type="checkbox" checked> 프롤로그·에필로그·후기·외전·특별편도 인식</label>
+  <p class="small">감지 후 아래 목록에서 본문 속 <code>#2948</code> 같은 오인식 항목을 체크 해제할 수 있습니다.</p>
+</div>
+
+<div class="readability-box" style="margin-bottom:12px">
+  <b>권 순서 적용 기준</b>
+  <label><input id="preserveOriginalOrder" type="checkbox" checked> 원본 NAV/NCX 또는 붙여넣은 목차 순서 유지</label>
+  <label><input id="autoSortVolumes" type="checkbox" checked> 원본 계층 목차가 없을 때만 권 번호 기준 자동 정렬</label>
+  <p class="small">우선순위: 원본 NAV/NCX → 붙여넣은 목차 → ZIP 내부 파일명 → 자동 추론</p>
+</div>
+<label class="section-toggle"><input id="enableTocWork" type="checkbox" checked> 목차·권 페이지 재구성 실행</label><div id="tocWorkBody">
 <textarea id="tocText" placeholder="1권&#10;1화&#10;2화&#10;&#10;2권&#10;3화&#10;4화&#10;&#10;[권] 외전&#10;외전 1화"></textarea>
 <div class="row" style="margin-top:10px">
 <button id="applyTocBtn" disabled>목차 분석·본문 배정</button>
 <button id="autoOriginalBtn" class="light" disabled>원본 목차로 자동 구성</button>
 </div>
-<p class="small">ZIP(TXT)은 내부 TXT 파일명을 권·외전으로 인식해 권→화 구조로 구성합니다. 목차 분석 후 권별 표지 선택창과 화별 원본 대응표가 나타납니다. 외전 1·외전 2는 현재 권의 하위 화이며, 별도 외전권은 <code>[권] 외전</code>으로 입력합니다.</p>
+<p class="small">원본 NAV/NCX가 있으면 그 순서를 그대로 유지합니다. 없으면 붙여넣은 목차 순서를 유지하고, 그마저 없을 때만 ZIP 내부 TXT 파일명을 권·외전으로 인식해 자동 정렬합니다. 목차 분석 후 권별 표지 선택창과 화별 원본 대응표가 나타납니다. 외전 1·외전 2는 현재 권의 하위 화이며, 별도 외전권은 <code>[권] 외전</code>으로 입력합니다.</p>
 </div></section>
+
+
+<section id="candidateReviewCard" class="card hidden">
+<h2>4-0. 감지된 화 후보 확인</h2>
+<div class="row">
+  <button id="selectAllCandidatesBtn" type="button" class="light">전체 사용</button>
+  <button id="deselectAllCandidatesBtn" type="button" class="light">전체 제외</button>
+</div>
+<p class="small">체크를 해제하면 목차와 새 화 시작점에서만 제외됩니다. 해당 문구와 본문은 삭제되지 않고 이전 유효 화에 포함됩니다.</p>
+<div id="candidateReviewArea"></div>
+</section>
 
 <section id="mappingCard" class="card hidden">
 <h2>4-1. 목차·본문 대응 및 권별 표지</h2>
@@ -232,6 +263,21 @@ function volumeInfoFromFilename(name){
  }
  return {label:cleanBookTitleFromFilename(base)||"본문",kind:3,number:9999};
 }
+
+function shouldPreserveGivenOrder(source){
+ return (source==="original"||source==="pasted") && ($("preserveOriginalOrder")?.checked!==false);
+}
+function maybeSortGroups(groups,source){
+ if(shouldPreserveGivenOrder(source))return groups;
+ if(source==="zip"&&$("autoSortVolumes")?.checked!==false){
+  return [...groups].sort((a,b)=>compareVolumeInfo(
+   a.info||volumeInfoFromFilename(a.title),
+   b.info||volumeInfoFromFilename(b.title)
+  ));
+ }
+ return groups;
+}
+
 function compareVolumeInfo(a,b){
  return a.kind-b.kind || a.number-b.number || a.label.localeCompare(b.label,"ko",{numeric:true});
 }
@@ -403,26 +449,93 @@ function decodeText(bytes, mode="auto"){
  return new TextDecoder("utf-8").decode(arr).replace(/^\uFEFF/,"");
 }
 function normalizeTxt(s){return s.replace(/\r\n?/g,"\n").replace(/\u0000/g,"").trim()}
+function currentTxtDetectMode(){
+ return document.querySelector('input[name="txtDetectMode"]:checked')?.value||"auto";
+}
+function specialTitleLine(s){
+ return /^(?:프롤로그|prologue|에필로그|epilogue|후기|후일담|서장|종장|막간|interlude|외전(?:\s*\d+)?(?:\s*화)?|특별편(?:\s*\d+)?|번외편?(?:\s*\d+)?|special(?:\s*\d+)?|side\s*story(?:\s*\d+)?)$/i.test(s);
+}
 function chapterLine(line){
  const s=line.trim();
- return /^(?:프롤로그|prologue|에필로그|epilogue|후일담|서장|종장|막간|interlude|외전(?:\s*\d+)?(?:\s*화)?|특별편(?:\s*\d+)?|번외편?(?:\s*\d+)?|special(?:\s*\d+)?|side\s*story(?:\s*\d+)?|(?:제\s*)?\d+\s*(?:화|장|회|편)(?:\s*[.:：\-–—]\s*.*|\s+.*)?|\d+\s*[.:：]\s*.+)$/i.test(s)
+ if(!s)return false;
+ const mode=currentTxtDetectMode();
+ let ok=false;
+ if(mode==="hash")ok=/^#\s*\d+\s*$/.test(s);
+ else if(mode==="numhwa")ok=/^\d+\s*화\s*$/.test(s);
+ else if(mode==="jenumhwa")ok=/^제\s*\d+\s*화\s*$/.test(s);
+ else if(mode==="chapter")ok=/^chapter\s*\d+\s*$/i.test(s);
+ else if(mode==="custom"){
+  try{ok=new RegExp($("customDetectPattern").value.trim()).test(s)}catch(e){ok=false}
+ }else ok=/^(?:#\s*\d+|제?\s*\d+\s*화|chapter\s*\d+)$/i.test(s);
+ if(ok)return true;
+ return $("includeSpecialTitles")?.checked!==false && specialTitleLine(s);
 }
-function splitTxtChapters(text,fileLabel){
- const lines=normalizeTxt(text).split("\n"), starts=[];
- for(let i=0;i<lines.length;i++)if(chapterLine(lines[i]))starts.push(i);
- if(!starts.length)return [{title:fileLabel.replace(/\.txt$/i,""),content:normalizeTxt(text)}];
+function scanTxtMarkers(text,fileName){
+ const lines=normalizeTxt(text).split("\n"),out=[];
+ for(let i=0;i<lines.length;i++){
+  if(chapterLine(lines[i]))out.push({
+   key:`${fileName}::${i}`,
+   title:lines[i].trim(),
+   lineIndex:i,
+   sourceFile:fileName
+  });
+ }
+ return out;
+}
+function splitTxtChaptersByMarkers(text,fileLabel,markers,enabledMap){
+ const lines=normalizeTxt(text).split("\n");
+ const active=markers.filter(m=>enabledMap.get(m.key)!==false);
+ if(!active.length)return [{title:fileLabel.replace(/\.txt$/i,""),content:normalizeTxt(text)}];
  const out=[];
- if(starts[0]>0){
-  const pre=lines.slice(0,starts[0]).join("\n").trim();
+ if(active[0].lineIndex>0){
+  const pre=lines.slice(0,active[0].lineIndex).join("\n").trim();
   if(pre.length>30)out.push({title:"프롤로그",content:pre});
  }
- for(let k=0;k<starts.length;k++){
-  const a=starts[k],b=k+1<starts.length?starts[k+1]:lines.length;
-  const title=lines[a].trim(),content=lines.slice(a+1,b).join("\n").trim();
-  out.push({title,content});
+ for(let i=0;i<active.length;i++){
+  const cur=active[i],next=active[i+1];
+  const content=lines.slice(cur.lineIndex+1,next?next.lineIndex:lines.length).join("\n").trim();
+  out.push({title:cur.title,content});
  }
  return out.filter(x=>x.content||x.title);
 }
+function rebuildTxtCandidatesFromSelections(){
+ if(state.inputType!=="txt")return;
+ const candidates=[];let n=0;
+ for(const file of state.txtFiles){
+  const markers=(state.rawTxtMarkers||[]).filter(x=>x.sourceFile===file.name);
+  const parts=splitTxtChaptersByMarkers(file.text,file.name,markers,state.candidateSelections);
+  for(const part of parts){
+   n++;candidates.push({
+    id:"txt_"+String(n).padStart(5,"0"),
+    href:"Text/chapter_"+String(n).padStart(5,"0")+".xhtml",
+    media:"application/xhtml+xml",
+    title:part.title,index:n-1,linear:"yes",
+    content:part.content,sourceFile:file.name,
+    sourceVolume:(file.volume||volumeInfoFromFilename(file.name)).label
+   });
+  }
+ }
+ state.candidates=candidates;state.spine=candidates;
+ $("fileInfo").textContent=`${state.title} · TXT ${state.txtFiles.length}개 · 본문 후보 ${candidates.length}개`;
+ setStatus(`TXT 화 후보 재구성 완료\n사용 중인 후보: ${candidates.length}개\n체크 해제한 표시는 원문에 남고 새 화 시작점으로 사용하지 않습니다.`);
+}
+function renderCandidateReview(){
+ const card=$("candidateReviewCard"),area=$("candidateReviewArea");
+ const list=state.rawTxtMarkers||[];
+ if(!list.length){card.classList.add("hidden");area.innerHTML="";return}
+ card.classList.remove("hidden");area.innerHTML="";
+ for(const c of list){
+  const enabled=state.candidateSelections.get(c.key)!==false;
+  const row=document.createElement("div");row.className="candidate-row";
+  row.innerHTML=`<label><input type="checkbox" ${enabled?"checked":""}> 사용</label><code>${esc(c.title)}</code><span class="small">${esc(c.sourceFile)} · 줄 ${c.lineIndex+1}</span>`;
+  row.querySelector("input").onchange=e=>{
+   state.candidateSelections.set(c.key,e.target.checked);
+   rebuildTxtCandidatesFromSelections();
+  };
+  area.appendChild(row);
+ }
+}
+
 function txtBodyHtml(text){
  const blocks=normalizeTxt(text).split(/\n{2,}/);
  return blocks.map(block=>{
@@ -441,18 +554,25 @@ async function analyzeTxtInput(f){
   for(const name of names)files.push({name,text:decodeText(await z.file(name).async("uint8array"),$("txtEncoding").value),volume:volumeInfoFromFilename(name)});
  }
  files.sort((a,b)=>compareVolumeInfo(a.volume||volumeInfoFromFilename(a.name),b.volume||volumeInfoFromFilename(b.name)));
+ const rawTxtMarkers=[];const candidateSelections=new Map();
+ for(const file of files){
+  const markers=scanTxtMarkers(file.text,file.name);
+  rawTxtMarkers.push(...markers);
+  for(const m of markers)candidateSelections.set(m.key,true);
+ }
  const candidates=[];let n=0;
  for(const file of files){
-  for(const part of splitTxtChapters(file.text,file.name)){
+  const markers=rawTxtMarkers.filter(x=>x.sourceFile===file.name);
+  for(const part of splitTxtChaptersByMarkers(file.text,file.name,markers,candidateSelections)){
    n++;candidates.push({id:"txt_"+String(n).padStart(5,"0"),href:"Text/chapter_"+String(n).padStart(5,"0")+".xhtml",media:"application/xhtml+xml",title:part.title,index:n-1,linear:"yes",content:part.content,sourceFile:file.name,sourceVolume:(file.volume||volumeInfoFromFilename(file.name)).label});
   }
  }
  const title=$("bookTitle").value.trim()||parseAuthorTitleFromFilename(f.name).title||f.name.replace(/\.(txt|zip)$/i,"");
  const creator=$("bookCreator").value.trim();
- state={inputType:"txt",zip:null,originalBytes:null,opfPath:"OEBPS/content.opf",opfDir:"OEBPS/",opfDoc:null,manifest:new Map(),spine:candidates,candidates,groups:[],title,creator,navHref:"nav.xhtml",ncxHref:"toc.ncx",txtFiles:files};
+ state={inputType:"txt",zip:null,originalBytes:null,opfPath:"OEBPS/content.opf",opfDir:"OEBPS/",opfDoc:null,manifest:new Map(),spine:candidates,candidates,groups:[],title,creator,navHref:"nav.xhtml",ncxHref:"toc.ncx",txtFiles:files,rawTxtMarkers,candidateSelections,coverCandidates:[],sourceCoverByGroup:new Map()};
  if(!$("bookTitle").value.trim())$("bookTitle").value=title;if(!$("bookCreator").value.trim())$("bookCreator").value=creator;
  $("fileInfo").textContent=`${title} · TXT ${files.length}개 · 본문 후보 ${candidates.length}개`;
- $("applyTocBtn").disabled=false;$("autoOriginalBtn").disabled=false;$("buildBtn").disabled=true;
+ $("applyTocBtn").disabled=false;$("autoOriginalBtn").disabled=false;$("buildBtn").disabled=true;renderCandidateReview();
  setStatus(`TXT 분석 완료\n작품명: ${title}\n작가: ${creator||"(직접 입력 가능)"}\nTXT 파일: ${files.length}\n본문 후보: ${candidates.length}\n권/구분 후보: ${files.map(x=>(x.volume||volumeInfoFromFilename(x.name)).label).join(" → ")}\n\n'원본 목차로 자동 구성'을 누르면 TXT 파일별로 권→화 구조를 만듭니다.`);
 }
 
@@ -566,7 +686,7 @@ async function extractOriginalHierarchicalGroups(){
    const text=await state.zip.file(full)?.async("text");
    if(text){
     const tree=navTreeFromDocument(parseXML(text,"NAV"),full);
-    const groups=groupsFromOriginalTree(tree);
+    const groups=maybeSortGroups(groupsFromOriginalTree(tree),"original");
     if(groups.some(g=>g.chapters.length))return groups;
    }
   }
@@ -575,7 +695,7 @@ async function extractOriginalHierarchicalGroups(){
    const text=await state.zip.file(full)?.async("text");
    if(text){
     const tree=ncxTreeFromDocument(parseXML(text,"NCX"),full);
-    const groups=groupsFromOriginalTree(tree);
+    const groups=maybeSortGroups(groupsFromOriginalTree(tree),"original");
     if(groups.some(g=>g.chapters.length))return groups;
    }
   }
@@ -596,8 +716,7 @@ $("autoOriginalBtn").onclick=async()=>{
     const entry=byFile.get(c.sourceFile);
     if(entry)entry.chapters.push({title:c.title,sourceId:c.id});
    }
-   const groups=[...byFile.values()]
-    .sort((a,b)=>compareVolumeInfo(a.info,b.info))
+   const zipGroups=maybeSortGroups([...byFile.values()],"zip")
     .map(x=>({
       title:x.title,
       chapters:x.chapters,
@@ -620,7 +739,7 @@ $("autoOriginalBtn").onclick=async()=>{
    $("tocText").value=hierarchical.map(g=>`${g.title}\n${g.chapters.map(c=>c.title).join("\n")}`).join("\n\n");
    renderGroups();$("buildBtn").disabled=false;
    const total=hierarchical.reduce((n,g)=>n+g.chapters.length,0);
-   setStatus(`원본 계층 목차 구성 완료\n권/구분: ${hierarchical.length}개\n화: ${total}개`);
+   setStatus(`원본 계층 목차 구성 완료\n권/구분: ${hierarchical.length}개\n화: ${total}개\n적용 기준: 원본 NAV/NCX 순서 유지`);
    return;
   }
 
@@ -656,9 +775,9 @@ $("applyTocBtn").onclick=()=>{
     }
     n++;
   }
-  state.groups=groups;renderGroups();$("buildBtn").disabled=false;
+  state.groups=maybeSortGroups(groups,"pasted");renderGroups();$("buildBtn").disabled=false;
   const st=mappingStats();
-  setStatus(`목차 분석 완료\n구분: ${groups.length}개\n붙여넣은 화: ${n}개\n본문 후보: ${state.candidates.length}\n일치 ${st.ok} · 유사 ${st.similar} · 불일치 ${st.bad} · 미배정 ${st.unmatched} · 미사용 원본 ${st.unused}`);
+  setStatus(`목차 분석 완료\n적용 기준: 붙여넣은 목차 순서 유지\n구분: ${state.groups.length}개\n붙여넣은 화: ${n}개\n본문 후보: ${state.candidates.length}\n일치 ${st.ok} · 유사 ${st.similar} · 불일치 ${st.bad} · 미배정 ${st.unmatched} · 미사용 원본 ${st.unused}`);
  }catch(e){setStatus("오류: "+e.message)}
 };
 
@@ -1237,7 +1356,9 @@ function currentSettings(){
   validateXmlBuild:true,
   validateLinksBuild:true,
   validateZipBuild:true,
-  validateCssBuild:$("validateCssBuild").checked
+  validateCssBuild:$("validateCssBuild").checked,
+  preserveOriginalOrder:$("preserveOriginalOrder").checked,
+  autoSortVolumes:$("autoSortVolumes").checked
  };
 }
 function applySettings(s){
@@ -1272,15 +1393,43 @@ function selectedTasks(){
 function updateChangePreview(){
  const a=selectedTasks();$("changePreview").textContent=a.length?"실행 예정:\n- "+a.join("\n- "):"선택된 작업이 없습니다.";
 }
+function orderPolicyText(){
+ const preserve=$("preserveOriginalOrder")?.checked!==false;
+ const autoSort=$("autoSortVolumes")?.checked!==false;
+ return `순서 정책: 원본/붙여넣기 ${preserve?"유지":"재정렬 가능"} · ZIP ${autoSort?"권번호 자동 정렬":"파일 나열 순서 유지"}`;
+}
 function updateStructurePreview(){
  const el=$("structurePreview");if(!el)return;
  if(!state.groups.length){el.textContent="목차를 분석하면 권·화 구조를 확인할 수 있습니다.";return}
- el.textContent=state.groups.map(g=>`${g.title}\n${g.chapters.map(c=>`  ├─ ${c.title}`).join("\n")}`).join("\n\n");
+ el.textContent=orderPolicyText()+"\n\n"+state.groups.map(g=>`${g.title}\n${g.chapters.map(c=>`  ├─ ${c.title}`).join("\n")}`).join("\n\n");
 }
 $("previewBtn").onclick=()=>{updateStructurePreview();updateChangePreview();$("structurePreview").scrollIntoView({behavior:"smooth",block:"center"})};
-["enableCoverWork","enableDescriptionWork","enableTocWork","enableReadabilityWork","removeJustifyInBuild","validateCssBuild","strictMapping"].forEach(id=>$(id)?.addEventListener("change",updateChangePreview));
-document.querySelectorAll('input[name="readMode"]').forEach(x=>x.addEventListener("change",updateChangePreview));
+["enableCoverWork","enableDescriptionWork","enableTocWork","enableReadabilityWork","removeJustifyInBuild","validateCssBuild","strictMapping","preserveOriginalOrder","autoSortVolumes"].forEach(id=>$(id)?.addEventListener("change",updateChangePreview));
+document.querySelectorAll('input[name="readMode"]').forEach(x=>x.addEventListener("change",updateChangePreview));["preserveOriginalOrder","autoSortVolumes"].forEach(id=>$(id)?.addEventListener("change",()=>{updateStructurePreview();updateChangePreview()}));
 updateChangePreview();
+
+
+function rescanTxtWithCurrentPattern(){
+ if(state.inputType!=="txt"||!state.txtFiles.length)return;
+ state.rawTxtMarkers=[];state.candidateSelections=new Map();
+ for(const file of state.txtFiles){
+  const markers=scanTxtMarkers(file.text,file.name);
+  state.rawTxtMarkers.push(...markers);
+  for(const m of markers)state.candidateSelections.set(m.key,true);
+ }
+ renderCandidateReview();rebuildTxtCandidatesFromSelections();
+}
+$("selectAllCandidatesBtn").onclick=()=>{
+ for(const m of state.rawTxtMarkers||[])state.candidateSelections.set(m.key,true);
+ renderCandidateReview();rebuildTxtCandidatesFromSelections();
+};
+$("deselectAllCandidatesBtn").onclick=()=>{
+ for(const m of state.rawTxtMarkers||[])state.candidateSelections.set(m.key,false);
+ renderCandidateReview();rebuildTxtCandidatesFromSelections();
+};
+document.querySelectorAll('input[name="txtDetectMode"]').forEach(x=>x.addEventListener("change",rescanTxtWithCurrentPattern));
+$("customDetectPattern").addEventListener("change",()=>{if(currentTxtDetectMode()==="custom")rescanTxtWithCurrentPattern()});
+$("includeSpecialTitles").addEventListener("change",rescanTxtWithCurrentPattern);
 
 $("resetBtn").onclick=()=>location.reload();
 </script>
