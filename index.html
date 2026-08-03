@@ -109,14 +109,16 @@ window.addEventListener("unhandledrejection",function(e){
 <section class="card">
 <h2>4. 목차 붙여넣기</h2>
 <div class="readability-box" style="margin-bottom:12px">
-  <b>TXT 화 인식 방식</b>
-  <label><input type="radio" name="txtDetectMode" value="auto" checked> 자동 감지</label>
-  <label><input type="radio" name="txtDetectMode" value="hash"> #번호만 <span class="small">예: #1, #25</span></label>
-  <label><input type="radio" name="txtDetectMode" value="numhwa"> 번호화만 <span class="small">예: 1화, 25화</span></label>
-  <label><input type="radio" name="txtDetectMode" value="jenumhwa"> 제번호화만 <span class="small">예: 제1화, 제25화</span></label>
-  <label><input type="radio" name="txtDetectMode" value="chapter"> Chapter만 <span class="small">예: Chapter 1</span></label>
-  <label><input type="radio" name="txtDetectMode" value="custom"> 직접 입력한 정규식</label>
-  <input id="customDetectPattern" type="text" placeholder="예: ^EP\\d+$">
+  <label for="txtDetectMode"><b>TXT 화 인식 방식</b></label>
+  <select id="txtDetectMode">
+    <option value="auto">자동 감지 — #1 · 1화 · 제1화 · Chapter 1 모두 인식 (권장)</option>
+    <option value="hash">#번호만 (예: #1, #25)</option>
+    <option value="numhwa">번호화만 (예: 1화, 25화)</option>
+    <option value="jenumhwa">제번호화만 (예: 제1화, 제25화)</option>
+    <option value="chapter">Chapter만 (예: Chapter 1)</option>
+    <option value="custom">직접 입력한 정규식</option>
+  </select>
+  <input id="customDetectPattern" type="text" placeholder="직접 입력 정규식 (예: ^EP\\d+$)" style="display:none;margin-top:7px">
   <label><input id="includeSpecialTitles" type="checkbox" checked> 프롤로그·에필로그·후기·외전·특별편도 인식</label>
   <p class="small">감지 후 아래 목록에서 본문 속 <code>#2948</code> 같은 오인식 항목을 체크 해제할 수 있습니다.</p>
 </div>
@@ -295,6 +297,12 @@ XML·manifest·spine·내부 링크·ZIP 검사는 항상 실행되며, 실패�
 </details>
 </section>
 </main>
+<div class="mobile-toolbar">
+  <button id="mobileAnalyzeBtn" type="button" class="light">원본 분석</button>
+  <button id="mobileAutoTocBtn" type="button" class="light">목차 자동</button>
+  <button id="mobilePreviewBtn" type="button" class="light">미리보기</button>
+  <button id="mobileBuildBtn" type="button">EPUB 생성</button>
+</div>
 
 <script>
 /*!
@@ -552,7 +560,7 @@ function decodeText(bytes, mode="auto"){
 }
 function normalizeTxt(s){return s.replace(/\r\n?/g,"\n").replace(/\u0000/g,"").trim()}
 function currentTxtDetectMode(){
- return document.querySelector('input[name="txtDetectMode"]:checked')?.value||"auto";
+ return $("txtDetectMode")?.value||"auto";
 }
 function specialTitleLine(s){
  return /^(?:프롤로그|prologue|에필로그|epilogue|후기|후일담|서장|종장|막간|interlude|외전(?:\s*(?:#?\d+|제?\s*\d+\s*화))?|외전\s*[-_:]\s*.+|특별편(?:\s*(?:#?\d+|제?\s*\d+\s*화))?|번외편?(?:\s*(?:#?\d+|제?\s*\d+\s*화))?|special(?:\s*(?:#?\d+))?|side\s*story(?:\s*(?:#?\d+))?|after\s*story(?:\s*(?:#?\d+))?)$/i.test(s);
@@ -1505,12 +1513,6 @@ function makeXhtml(title,body,cssHref){
     <button id="closeBuildProgressBtn" type="button" class="secondary hidden">닫기</button>
   </div>
 </div>
-<div class="mobile-toolbar">
-  <button id="mobileAnalyzeBtn" type="button" class="light">원본 분석</button>
-  <button id="mobileAutoTocBtn" type="button" class="light">목차 자동</button>
-  <button id="mobilePreviewBtn" type="button" class="light">미리보기</button>
-  <button id="mobileBuildBtn" type="button">EPUB 생성</button>
-</div>
 </body></html>`;
 }
 
@@ -1620,12 +1622,6 @@ async function buildTxtEpub(){
  }
  let navOl=navGroups.map(g=>`<li><a href="${esc(g.href)}">${esc(g.title)}</a><ol>${g.chapters.map(c=>`<li><a href="${esc(c.href)}">${esc(c.title)}</a></li>`).join("")}</ol></li>`).join("");
  zip.file("OEBPS/nav.xhtml",`<?xml version="1.0" encoding="utf-8"?><!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>목차</title></head><body><nav epub:type="toc" id="toc"><h1>목차</h1><ol>${navOl}</ol></nav>
-<div class="mobile-toolbar">
-  <button id="mobileAnalyzeBtn" type="button" class="light">원본 분석</button>
-  <button id="mobileAutoTocBtn" type="button" class="light">목차 자동</button>
-  <button id="mobilePreviewBtn" type="button" class="light">미리보기</button>
-  <button id="mobileBuildBtn" type="button">EPUB 생성</button>
-</div>
 </body></html>`);add("nav","nav.xhtml","application/xhtml+xml","nav");
  let po=0;const points=navGroups.map((g,gi)=>{po++;const p=po,kids=g.chapters.map((c,ci2)=>{po++;return `<navPoint id="ch_${gi}_${ci2}" playOrder="${po}"><navLabel><text>${esc(c.title)}</text></navLabel><content src="${esc(c.href)}"/></navPoint>`}).join("");return `<navPoint id="vol_${gi}" playOrder="${p}"><navLabel><text>${esc(g.title)}</text></navLabel><content src="${esc(g.href)}"/>${kids}</navPoint>`}).join("");
  const uid="urn:uuid:"+crypto.randomUUID();
@@ -1751,12 +1747,6 @@ $("buildBtn").onclick=async()=>{
   const navFile=join(state.opfDir,navHref);
   let navOl=navGroups.map(g=>`<li><a href="${esc(relative(navFile,join(state.opfDir,g.href)))}">${esc(g.title)}</a><ol>${g.chapters.map(c=>`<li><a href="${esc(relative(navFile,join(state.opfDir,c.href)))}">${esc(c.title)}</a></li>`).join("")}</ol></li>`).join("");
   const navXml=`<?xml version="1.0" encoding="utf-8"?><!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>목차</title></head><body><nav epub:type="toc" id="toc"><h1>목차</h1><ol>${navOl}</ol></nav>
-<div class="mobile-toolbar">
-  <button id="mobileAnalyzeBtn" type="button" class="light">원본 분석</button>
-  <button id="mobileAutoTocBtn" type="button" class="light">목차 자동</button>
-  <button id="mobilePreviewBtn" type="button" class="light">미리보기</button>
-  <button id="mobileBuildBtn" type="button">EPUB 생성</button>
-</div>
 </body></html>`;
   zip.file(navFile,navXml);
 
@@ -1961,7 +1951,9 @@ $("deselectAllCandidatesBtn").onclick=()=>{
  for(const m of state.rawTxtMarkers||[])state.candidateSelections.set(m.key,false);
  renderCandidateReview();rebuildTxtCandidatesFromSelections();renderMobileTree();updatePreflight();
 };
-document.querySelectorAll('input[name="txtDetectMode"]').forEach(x=>x.addEventListener("change",rescanTxtWithCurrentPattern));
+function syncCustomPatternVisibility(){const el=$("customDetectPattern");if(el)el.style.display=currentTxtDetectMode()==="custom"?"block":"none"}
+$("txtDetectMode").addEventListener("change",()=>{syncCustomPatternVisibility();rescanTxtWithCurrentPattern()});
+syncCustomPatternVisibility();
 $("customDetectPattern").addEventListener("change",()=>{if(currentTxtDetectMode()==="custom")rescanTxtWithCurrentPattern()});
 $("includeSpecialTitles").addEventListener("change",rescanTxtWithCurrentPattern);
 
@@ -2023,10 +2015,4 @@ window.addEventListener("unhandledrejection",e=>{if(!$("buildProgressOverlay").c
 $("resetBtn").onclick=()=>location.reload();
 </script>
 
-<div class="mobile-toolbar">
-  <button id="mobileAnalyzeBtn" type="button" class="light">원본 분석</button>
-  <button id="mobileAutoTocBtn" type="button" class="light">목차 자동</button>
-  <button id="mobilePreviewBtn" type="button" class="light">미리보기</button>
-  <button id="mobileBuildBtn" type="button">EPUB 생성</button>
-</div>
 </body></html>
