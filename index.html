@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>EPUB Studio Mobile v5.2</title>
+<title>EPUB Studio Mobile v5.3</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -72,7 +72,7 @@ window.addEventListener("unhandledrejection",function(e){
 </script>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v5.2</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본</div></header>
+<header><h1>EPUB Studio Mobile v5.3</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본</div></header>
 <main>
 
 <div id="buildMode">
@@ -113,7 +113,7 @@ window.addEventListener("unhandledrejection",function(e){
 
 <section class="card">
 <h2>4. 목차 붙여넣기</h2>
-<p class="small"><b>붙여넣은 목차가 최우선입니다.</b> 원본에 내부 목차가 있어도 그 구역의 제목은 건너뛰고, 뒤에서 다시 나오는 실제 본문 제목을 화 시작점으로 사용합니다.</p>
+<p class="small"><b>붙여넣은 목차가 최우선입니다.</b> 재구성을 누르면 이전 배정을 지우고 처음부터 다시 찾습니다.  원본에 내부 목차가 있어도 그 구역의 제목은 건너뛰고, 뒤에서 다시 나오는 실제 본문 제목을 화 시작점으로 사용합니다.</p>
 <div class="readability-box" style="margin-bottom:12px">
   <b>TXT 화 인식 방식</b>
   <p class="small">TXT 안에 ‘목차’가 있으면 Momentum 1장, Bull market 1장 같은 임의 제목도 자동으로 읽고, 본문에서 같은 제목이 다시 나타나는 위치에 연결합니다.</p>
@@ -147,7 +147,7 @@ window.addEventListener("unhandledrejection",function(e){
 </div>
 
 <div class="row" style="margin-top:10px">
-<button id="applyTocBtn" disabled>목차 분석·본문 배정</button>
+<button id="applyTocBtn" disabled>붙여넣은 목차로 본문 재구성</button>
 <button id="autoOriginalBtn" class="light" disabled>원본 목차로 자동 구성</button>
 </div>
 <p class="small">원본 NAV/NCX가 있으면 그 순서를 그대로 유지합니다. 없으면 붙여넣은 목차 순서를 유지하고, 그마저 없을 때만 ZIP 내부 TXT 파일명을 권·외전으로 인식해 자동 정렬합니다. 목차 분석 후 권별 표지 선택창과 화별 원본 대응표가 나타납니다. 외전 1·외전 2는 현재 권의 하위 화이며, 별도 외전권은 <code>[권] 외전</code>으로 입력합니다.</p>
@@ -750,8 +750,27 @@ function scoreGroupFileMatch(groupTitle,file){
  if(ga&&fa.includes(ga))return 80;
  return 0;
 }
+
+function availableTxtSources(){
+ const pure=Array.isArray(state.txtFiles)?state.txtFiles:[];
+ const mixed=Array.isArray(state.mixedTxtFiles)?state.mixedTxtFiles:[];
+ const all=[...pure,...mixed];
+ const seen=new Set();
+ return all.filter(file=>{
+  const key=file.name||"";
+  if(!key||seen.has(key))return false;
+  seen.add(key);return true;
+ }).map(file=>({
+  ...file,
+  volume:file.volume||volumeInfoFromFilename(file.name)
+ }));
+}
+function hasTxtSources(){
+ return availableTxtSources().length>0;
+}
+
 function fileForPastedGroup(group,usedFiles){
- const ranked=state.txtFiles
+ const ranked=availableTxtSources()
   .map((file,index)=>({file,index,score:scoreGroupFileMatch(group.title,file)}))
   .filter(x=>!usedFiles.has(x.file.name))
   .sort((a,b)=>b.score-a.score||a.index-b.index);
@@ -759,17 +778,32 @@ function fileForPastedGroup(group,usedFiles){
  return ranked[0]?.file||null;
 }
 function rebuildTxtCandidatesFromPastedGroups(groups){
- if(state.inputType!=="txt"||!state.txtFiles.length)return {groups,matched:0,unmatched:0};
- const newCandidates=[];
+ const txtSources=availableTxtSources();
+ if(!txtSources.length)return {groups,matched:0,unmatched:groups.reduce((n,g)=>n+g.chapters.length,0)};
+ const isMixed=state.inputType==="epub_collection"&&txtSources.length>0;
+ const preservedCandidates=isMixed
+  ?state.candidates.filter(c=>c.sourceKind!=="txt"&&!String(c.id||"").startsWith("mixed_txt_")&&!String(c.id||"").startsWith("pasted_"))
+  :[];
+ const newCandidates=[...preservedCandidates];
  const rebuiltGroups=[];
  const usedFiles=new Set();
- let candidateNo=0,matched=0,unmatched=0;
+ let candidateNo=newCandidates.length,matched=0,unmatched=0;
 
  for(const group of groups){
   const file=fileForPastedGroup(group,usedFiles);
-  if(!file){
-   rebuiltGroups.push({...group,chapters:group.chapters.map(ch=>({...ch,sourceId:null}))});
-   unmatched+=group.chapters.length;
+  const fileScore=file?scoreGroupFileMatch(group.title,file):0;
+  if(!file || (isMixed&&fileScore<=0)){
+   const rebuilt={...group,chapters:[]};
+   for(const ch of group.chapters){
+    let best=null,bestScore=-1;
+    for(const c of preservedCandidates){
+     const sc=improvedMatchScore(ch.title,c);
+     if(sc>bestScore){bestScore=sc;best=c}
+    }
+    if(best&&bestScore>=0.55){rebuilt.chapters.push({...ch,sourceId:best.id});matched++}
+    else{rebuilt.chapters.push({...ch,sourceId:null});unmatched++}
+   }
+   rebuiltGroups.push(rebuilt);
    continue;
   }
   usedFiles.add(file.name);
@@ -806,7 +840,7 @@ function rebuildTxtCandidatesFromPastedGroups(groups){
    candidateNo++;
    const candidate={
     id:"pasted_"+String(candidateNo).padStart(5,"0"),
-    href:"Text/chapter_"+String(candidateNo).padStart(5,"0")+".xhtml",
+    href:(isMixed?"MixedText/":"Text/")+"chapter_"+String(candidateNo).padStart(5,"0")+".xhtml",
     media:"application/xhtml+xml",
     title:item.chapter.title,
     index:candidateNo-1,
@@ -815,7 +849,8 @@ function rebuildTxtCandidatesFromPastedGroups(groups){
     sourceFile:file.name,
     sourceVolume:(file.volume||volumeInfoFromFilename(file.name)).label,
     detectedBy:tocRange?"pasted-toc-skip-internal":"pasted-toc",
-    sourceLine:item.lineIndex
+    sourceLine:item.lineIndex,
+    sourceKind:"txt"
    };
    newCandidates.push(candidate);
    rebuiltChapters.push({...item.chapter,sourceId:candidate.id});
@@ -830,12 +865,10 @@ function rebuildTxtCandidatesFromPastedGroups(groups){
   });
  }
 
- if(newCandidates.length){
-  state.candidates=newCandidates;
-  state.spine=newCandidates;
-  state.groups=rebuiltGroups;
-  state.manualGrouping=true;
- }
+ state.candidates=newCandidates;
+ state.spine=newCandidates;
+ state.groups=rebuiltGroups;
+ state.manualGrouping=true;
  return {groups:rebuiltGroups,matched,unmatched};
 }
 
@@ -1424,13 +1457,17 @@ $("applyTocBtn").onclick=()=>{
 
   let n=groups.reduce((sum,g)=>sum+g.chapters.length,0);
 
-  if(state.inputType==="txt"){
+  if(hasTxtSources()){
+   for(const g of groups)for(const ch of g.chapters)ch.sourceId=null;
    const result=rebuildTxtCandidatesFromPastedGroups(groups);
    state.groups=maybeSortGroups(result.groups,"pasted");
    state.manualGrouping=true;
    renderGroups();$("buildBtn").disabled=false;
+   const unassignedRows=state.groups.flatMap(g=>g.chapters).filter(ch=>!ch.sourceId);
+   if(unassignedRows.length)$("buildBtn").disabled=true;
    const st=mappingStats();
-   setStatus(`붙여넣은 목차 기준 TXT 본문 검색 완료\n권/구분: ${state.groups.length}개\n붙여넣은 화: ${n}개\n본문에서 찾음: ${result.matched}개\n찾지 못함: ${result.unmatched}개\n생성된 본문 후보: ${state.candidates.length}개\n\nTXT 내부 목차 구역의 제목은 건너뛰고, 같은 제목이 다시 나타나는 실제 본문 위치를 화 시작점으로 사용했습니다.`);
+   const assigned=state.groups.reduce((sum,g)=>sum+g.chapters.filter(ch=>ch.sourceId).length,0);
+   setStatus(`붙여넣은 목차로 본문 재구성 완료\n권/구분: ${state.groups.length}개\n목차 항목: ${n}개\n실제 배정: ${assigned}개\n찾지 못함: ${result.unmatched}개\n전체 본문 후보: ${state.candidates.length}개\n\n기존 배정을 초기화하고 TXT 전체를 다시 검색했습니다. 내부 목차의 제목은 건너뛰고 실제 본문 위치를 연결했습니다.`);
    return;
   }
 
@@ -1695,7 +1732,7 @@ function makeGenerationReport(extra={}){
  const chapterCount=state.groups.reduce((n,g)=>n+g.chapters.length,0);
  const issues=analyzeProjectIssues();
  const lines=[
-  `EPUB Studio Mobile v5.2 생성 리포트`,
+  `EPUB Studio Mobile v5.3 생성 리포트`,
   `작품명: ${$("bookTitle").value.trim()}`,
   `작가명: ${$("bookCreator").value.trim()||"(없음)"}`,
   `권/구분: ${state.groups.length}개`,
