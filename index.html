@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>EPUB Studio Mobile v6.0</title>
+<title>EPUB Studio Mobile v6.0.1</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -72,7 +72,7 @@ window.addEventListener("unhandledrejection",function(e){
 </script>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v6.0</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본</div></header>
+<header><h1>EPUB Studio Mobile v6.0.1</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본</div></header>
 <main>
 
 <div id="buildMode">
@@ -731,16 +731,6 @@ function cleanDescription(text){
  }
  return out.join("\n").trim();
 }
-function descriptionHtml(text){
- const headings=/^(작품\s*소개|BL\s*가이드|배경\s*\/?\s*분야|작품\s*키워드|키워드|공|수|서브공|이럴\s*때\s*보세요|공감\s*글귀|분량\s*안내)\s*:?\s*$/i;
- return text.split(/\r?\n/).map(line=>{
-  const t=line.trim(); if(!t)return "<p class='gap'>&#160;</p>";
-  if(headings.test(t))return "<h2>"+esc(t.replace(/:$/,""))+"</h2>";
-  return "<p>"+esc(line)+"</p>";
- }).join("\n");
-}
-
-
 function decodeText(bytes, mode="auto"){
  const arr=bytes instanceof Uint8Array?bytes:new Uint8Array(bytes);
  const tryDecode=enc=>{try{return new TextDecoder(enc,{fatal:true}).decode(arr)}catch(e){return null}};
@@ -1889,7 +1879,7 @@ function makeGenerationReport(extra={}){
  const chapterCount=state.groups.reduce((n,g)=>n+g.chapters.length,0);
  const issues=analyzeProjectIssues();
  const lines=[
-  `EPUB Studio Mobile v6.0 생성 리포트`,
+  `EPUB Studio Mobile v6.0.1 생성 리포트`,
   `작품명: ${$("bookTitle").value.trim()}`,
   `작가명: ${$("bookCreator").value.trim()||"(없음)"}`,
   `권/구분: ${state.groups.length}개`,
@@ -2381,7 +2371,7 @@ async function buildEpubCollection(){
  }
 
  const cssHref="Styles/hm_builder.css";
- zip.file("OEBPS/"+cssHref,`html,body{margin:0;padding:0}body.hm-title{display:flex;min-height:95vh;align-items:center;justify-content:center;text-align:center}body.hm-desc{padding:1.2em;line-height:1.75}.hm-cover{display:flex;min-height:98vh;align-items:center;justify-content:center}.hm-cover img,.hm-img{display:block;max-width:100%;height:auto;margin:auto}`);
+ zip.file("OEBPS/"+cssHref,`html,body{margin:0;padding:0}body.hm-title{display:flex;min-height:95vh;align-items:center;justify-content:center;text-align:center}body.hm-desc{padding:1.35em;line-height:1.85;word-break:keep-all;overflow-wrap:anywhere}.hm-desc-wrap{max-width:44em;margin:0 auto}.hm-desc-section{margin:0 0 2.2em;padding:0 0 1.5em;border-bottom:1px solid #d9d9d9}.hm-desc-section:last-child{border-bottom:0}.hm-desc-section h2{font-size:1.55em;line-height:1.35;text-align:center;margin:.4em 0 1.15em;padding-bottom:.55em;border-bottom:2px solid currentColor}.hm-desc-section h3{font-size:1.12em;line-height:1.45;margin:1.35em 0 .45em}.hm-desc-content p{margin:.75em 0;text-indent:0}.hm-cover{display:flex;min-height:98vh;align-items:center;justify-content:center}.hm-cover img,.hm-img{display:block;max-width:100%;height:auto;margin:auto}`);
  add("hm_css",cssHref,"text/css");
 
  const title=$("bookTitle").value.trim()||state.title;
@@ -2486,7 +2476,7 @@ async function buildTxtEpub(){
  const manifest=[],spine=[],navGroups=[];let manifestNo=0;
  const add=(id,href,media,props="")=>manifest.push({id,href,media,props});
  add("css","Styles/book.css","text/css");
- const cover=$("mainCover").files[0];
+ const cover=$("enableCoverWork").checked?$("mainCover").files[0]:null;
  if(cover){
   const ext=extOf(cover),href=`Images/cover.${ext}`;zip.file("OEBPS/"+href,await cover.arrayBuffer());add("cover_img",href,mediaType(href),"cover-image");
   zip.file("OEBPS/Text/cover.xhtml",makeXhtml("표지",`<div class="cover-page"><img src="../${href}" alt="표지"/></div>`,"../Styles/book.css"));add("cover","Text/cover.xhtml","application/xhtml+xml");spine.push("cover");
@@ -2503,7 +2493,7 @@ async function buildTxtEpub(){
     imgs+=`<img class="desc-img" src="../${href}" alt="작품 설명 이미지 ${i+1}"/>`;
   }
   const desc=descriptionSectionsHtml();
-  zip.file("OEBPS/Text/description.xhtml",makeXhtml("작품 설명",`<div class="desc">${imgs}${descriptionHtml(desc)}</div>`,"../Styles/book.css"));add("description","Text/description.xhtml","application/xhtml+xml");spine.push("description");
+  zip.file("OEBPS/Text/description.xhtml",makeXhtml("작품 설명",`<main class="hm-desc-wrap">${imgs}${desc}</main>`,"../Styles/book.css","hm-desc"));add("description","Text/description.xhtml","application/xhtml+xml");spine.push("description");
  }
  const byId=new Map(state.candidates.map(x=>[x.id,x]));let vi=0,ci=0;
  for(const g of state.groups){
@@ -2589,11 +2579,13 @@ $("buildBtn").onclick=async()=>{
    zip.file(join(state.opfDir,imgHref),await mainCover.arrayBuffer());
    zip.file(join(state.opfDir,xhtmlHref),makeXhtml("표지",`<div class="hm-cover"><img src="${esc("hm_cover."+ext)}" alt="표지"/></div>`,"hm_builder.css"));
    const imgId=uniqueId(opf,"hm_cover_image"),pageId=uniqueId(opf,"hm_cover_page");
+   for(const it of children(manifestEl,"item")){
+    const props=(it.getAttribute("properties")||"").split(/\s+/).filter(Boolean);
+    if(props.includes("cover-image"))it.setAttribute("properties",props.filter(x=>x!=="cover-image").join(" "));
+   }
    addManifestItem(opf,manifestEl,imgId,imgHref,mediaType(imgHref),"cover-image");
    addManifestItem(opf,manifestEl,pageId,xhtmlHref,"application/xhtml+xml");
    newSpine.push(pageId);
-   // remove old cover-image property and meta cover
-   for(const it of children(manifestEl,"item"))if(it!==manifestEl.lastChild&&it.getAttribute("properties")?.split(/\s+/).includes("cover-image"))it.setAttribute("properties",it.getAttribute("properties").split(/\s+/).filter(x=>x!=="cover-image").join(" "));
    for(const m of descendants(metadataEl,"meta"))if(m.getAttribute("name")==="cover")m.parentNode.removeChild(m);
    const meta=opf.createElementNS(metadataEl.namespaceURI||null,"meta");meta.setAttribute("name","cover");meta.setAttribute("content",imgId);metadataEl.appendChild(meta);
   }else{
@@ -2601,8 +2593,13 @@ $("buildBtn").onclick=async()=>{
    if(originalCover)newSpine.push(originalCover.id);
   }
 
+  if(mainCover){
+   const coverItem=children(manifestEl,"item").find(it=>(it.getAttribute("properties")||"").split(/\s+/).includes("cover-image"));
+   if(!coverItem)throw new Error("새 표지의 EPUB3 cover-image 등록에 실패했습니다.");
+  }
+
   // 설명
-  const includeDesc=true;
+  const includeDesc=$("enableDescriptionWork").checked&&([...$("descImages").files].length||$("workIntro").value.trim()||$("blGuide").value.trim()||$("descText").value.trim());
   if(includeDesc){
    let imgsHtml="";
    const descImgs=[...$("descImages").files];
@@ -2614,7 +2611,7 @@ $("buildBtn").onclick=async()=>{
    }
    const desc=descriptionSectionsHtml();
    const href=base+"hm_description.xhtml";
-   zip.file(join(state.opfDir,href),makeXhtml("작품 설명",imgsHtml+descriptionHtml(desc),"hm_builder.css","hm-desc"));
+   zip.file(join(state.opfDir,href),makeXhtml("작품 설명",imgsHtml+desc,"hm_builder.css","hm-desc"));
    const id=uniqueId(opf,"hm_description");addManifestItem(opf,manifestEl,id,href,"application/xhtml+xml");newSpine.push(id);
   }
 
