@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>EPUB Studio Mobile v0.2</title>
+<title>EPUB Studio Mobile v0.3</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -21,13 +21,23 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px
 .group-head{background:#f1f4fa;padding:10px;display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
 .group-body{padding:8px}.group-title{font-weight:800}.cover-label{font-size:11px;font-weight:500}
 .badge{display:inline-block;padding:2px 6px;border-radius:999px;background:#edf2ff;color:#244d9c;font-size:11px}
-.report{font-size:12px;line-height:1.6}.download{display:inline-block;text-decoration:none;margin-top:10px;background:#087a2f;color:#fff;padding:12px 16px;border-radius:9px;font-weight:800}
+.report{font-size:12px;line-height:1.6}code{background:#f0f1f3;padding:1px 4px;border-radius:4px}.active-mode{background:#087a2f!important}.download{display:inline-block;text-decoration:none;margin-top:10px;background:#087a2f;color:#fff;padding:12px 16px;border-radius:9px;font-weight:800}
 details summary{cursor:pointer;font-weight:700}
 </style>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v0.2</h1><div class="sub">EPUB·TXT·ZIP(TXT) → EPUB · OCR/AI 없이 목차를 붙여넣어 본문 대응</div></header>
+<header><h1>EPUB Studio Mobile v0.3</h1><div class="sub">① EPUB 제작·합본  ② 원본 유지·좌우 정렬만 제거</div></header>
 <main>
+
+<section class="card">
+<h2>작업 선택</h2>
+<div class="row">
+  <button id="modeBuildBtn">1. EPUB 만들기·합본</button>
+  <button id="modeJustifyBtn" class="secondary">2. 좌우 정렬만 제거</button>
+</div>
+<p class="small">두 기능은 서로 독립적으로 작동합니다. 좌우 정렬 제거 모드는 본문·CSS·이미지·목차 구조를 재작성하지 않습니다.</p>
+</section>
+<div id="buildMode">
 <section class="card">
 <h2>1. 원본 파일 분석</h2>
 <label>입력 파일 <span class="small">(.epub, .txt, TXT가 들어 있는 .zip)</span></label>
@@ -45,8 +55,9 @@ details summary{cursor:pointer;font-weight:700}
 <h2>2. 표지와 작품 설명</h2>
 <label>대표 표지 <span class="small">(선택하지 않으면 원본 표지를 유지)</span></label>
 <input id="mainCover" type="file" accept="image/*">
-<label>설명 이미지 <span class="small">(선택 사항, 여러 장 가능·설명 페이지 맨 앞)</span></label>
+<label>작품 설명 참고 캡처 <span class="small">(선택 사항·최종 EPUB에는 삽입하지 않음)</span></label>
 <input id="descImages" type="file" accept="image/*" multiple>
+<p class="small warn">캡처 이미지는 참고용으로만 선택합니다. OCR은 하지 않으며 최종 EPUB에는 넣지 않습니다. 아래 입력창에 텍스트를 직접 붙여넣으세요.</p>
 <label>작품 설명 텍스트 붙여넣기</label>
 <textarea id="descText" placeholder="작품 소개&#10;...&#10;&#10;BL 가이드&#10;...&#10;&#10;작품 키워드&#10;..."></textarea>
 <label><input id="cleanDesc" type="checkbox" checked> 작품 목차·출간 정보·서점 안내·광고 구역 자동 제외</label>
@@ -85,10 +96,32 @@ details summary{cursor:pointer;font-weight:700}
 <div id="result"></div>
 </section>
 
+
+</div>
+<div id="justifyMode" class="hidden">
+<section class="card">
+<h2>좌우 정렬만 제거</h2>
+<label>원본 EPUB</label>
+<input id="justifyFile" type="file" accept=".epub,application/epub+zip">
+<label><input id="removeCssJustify" type="checkbox" checked> CSS 파일의 <code>text-align: justify</code> 제거</label>
+<label><input id="removeInlineJustify" type="checkbox" checked> XHTML/HTML 인라인 style의 좌우 정렬 제거</label>
+<label><input id="removeAlignAttr" type="checkbox" checked> <code>align="justify"</code> 속성 제거</label>
+<div class="row" style="margin-top:12px">
+  <button id="justifyRunBtn">좌우 정렬 제거본 만들기</button>
+</div>
+<p class="small">다른 text-align 값(left, right, center 등)은 유지합니다. CSS 파일명·경로·개수와 EPUB 내부 구조는 그대로 유지하고, 대상 선언이 있는 파일만 최소 수정합니다.</p>
+</section>
+<section class="card">
+<h2>처리 결과</h2>
+<div id="justifyStatus" class="status">원본 EPUB을 선택하세요.</div>
+<div id="justifyResult"></div>
+</section>
+</div>
+
 <section class="card">
 <details><summary>프로그램의 현재 범위와 안전장치</summary>
 <div class="report">
-<p>EPUB 입력은 원본 ZIP의 모든 파일을 그대로 복사하고 CSS·본문 XHTML을 수정하지 않습니다. TXT 입력은 기본 가독성 CSS와 각 화별 XHTML을 새로 생성합니다.</p>
+<p>EPUB 제작 모드는 원본 ZIP 파일을 복사한 뒤 표지·설명·권 페이지·NAV/NCX/OPF를 구성합니다. 좌우 정렬 제거 모드는 text-align:justify 관련 선언이 있는 CSS/XHTML만 최소 수정하며 다른 리소스와 구조를 보존합니다.</p>
 <p>붙여넣은 목차와 원본 본문의 의미를 AI로 판단하지 않습니다. EPUB은 spine 순서, TXT는 감지된 화 순서로 기본 배정되며 생성 전에 연결 항목을 직접 확인할 수 있습니다.</p>
 </div>
 </details>
@@ -367,7 +400,6 @@ async function buildTxtEpub(){
  }
  if($("includeDesc").checked){
   let imgs="";const fs=[...$("descImages").files];
-  for(let i=0;i<fs.length;i++){const ext=extOf(fs[i]),href=`Images/description_${String(i+1).padStart(2,"0")}.${ext}`;zip.file("OEBPS/"+href,await fs[i].arrayBuffer());add("desc_img_"+i,href,mediaType(href));imgs+=`<img class="desc-img" src="../${href}" alt="설명 이미지 ${i+1}"/>`}
   const desc=cleanDescription($("descText").value);
   zip.file("OEBPS/Text/description.xhtml",makeXhtml("작품 설명",`<div class="desc">${imgs}${descriptionHtml(desc)}</div>`,"../Styles/book.css"));add("description","Text/description.xhtml","application/xhtml+xml");spine.push("description");
  }
@@ -451,11 +483,6 @@ $("buildBtn").onclick=async()=>{
   const includeDesc=$("includeDesc").checked;
   if(includeDesc){
    const descImgs=[...$("descImages").files];let imgsHtml="";
-   for(let i=0;i<descImgs.length;i++){
-    const f=descImgs[i],ext=extOf(f),href=base+`hm_desc_${String(i+1).padStart(2,"0")}.${ext}`;
-    zip.file(join(state.opfDir,href),await f.arrayBuffer());addManifestItem(opf,manifestEl,uniqueId(opf,"hm_desc_img_"+i),href,mediaType(href));
-    imgsHtml+=`<img class="hm-img" src="${esc(href.split("/").pop())}" alt="작품 설명 이미지 ${i+1}"/>`;
-   }
    const desc=cleanDescription($("descText").value);
    const href=base+"hm_description.xhtml";
    zip.file(join(state.opfDir,href),makeXhtml("작품 설명",imgsHtml+descriptionHtml(desc),"hm_builder.css"));
@@ -532,6 +559,126 @@ $("buildBtn").onclick=async()=>{
   result.scrollIntoView({behavior:"smooth"});
  }catch(e){setStatus("생성 오류: "+e.message);console.error(e)}
 };
+
+
+$("modeBuildBtn").onclick=()=>{
+ $("buildMode").classList.remove("hidden");$("justifyMode").classList.add("hidden");
+ $("modeBuildBtn").classList.add("active-mode");$("modeJustifyBtn").classList.remove("active-mode");
+};
+$("modeJustifyBtn").onclick=()=>{
+ $("justifyMode").classList.remove("hidden");$("buildMode").classList.add("hidden");
+ $("modeJustifyBtn").classList.add("active-mode");$("modeBuildBtn").classList.remove("active-mode");
+};
+$("modeBuildBtn").classList.add("active-mode");
+
+function removeJustifyDeclarations(css){
+ let count=0;
+ const out=css.replace(/(^|[;{]\s*)text-align(?:-last)?\s*:\s*justify\s*!?\s*important\s*;?/gi,(m,p)=>{count++;return p})
+              .replace(/(^|[;{]\s*)text-align(?:-last)?\s*:\s*justify\s*;?/gi,(m,p)=>{count++;return p});
+ return {text:out,count};
+}
+function removeInlineJustifyFromMarkup(text){
+ let count=0;
+ let out=text.replace(/\s+align\s*=\s*(["'])justify\1/gi,()=>{count++;return ""});
+ out=out.replace(/style\s*=\s*(["'])([\s\S]*?)\1/gi,(whole,q,value)=>{
+   const r=removeJustifyDeclarations(value);
+   if(!r.count)return whole;
+   count+=r.count;
+   const cleaned=r.text.replace(/^\s*;\s*|\s*;\s*$/g,"").trim();
+   return cleaned?`style=${q}${cleaned}${q}`:"";
+ });
+ return {text:out,count};
+}
+function listCssNames(zip){
+ return Object.keys(zip.files).filter(n=>!zip.files[n].dir&&/\.css$/i.test(n)).sort();
+}
+$("justifyRunBtn").onclick=async()=>{
+ const status=$("justifyStatus"),result=$("justifyResult");
+ try{
+   const f=$("justifyFile").files[0];if(!f)throw new Error("원본 EPUB을 선택하세요.");
+   status.textContent="EPUB 읽기 및 ZIP 무결성 검사 중...";result.innerHTML="";
+   const original=await f.arrayBuffer();
+   const zip=await JSZip.loadAsync(original,{checkCRC32:true});
+   const names=Object.keys(zip.files).filter(n=>!zip.files[n].dir);
+   const cssBefore=listCssNames(zip);
+   let cssFilesChanged=0,cssRulesRemoved=0,markupFilesChanged=0,inlineRemoved=0;
+   const modified=[];
+   if($("removeCssJustify").checked){
+     for(const name of cssBefore){
+       const old=await zip.file(name).async("text");
+       const r=removeJustifyDeclarations(old);
+       if(r.count){zip.file(name,r.text);cssFilesChanged++;cssRulesRemoved+=r.count;modified.push(name)}
+     }
+   }
+   if($("removeInlineJustify").checked||$("removeAlignAttr").checked){
+     const markup=names.filter(n=>/\.(xhtml|html|htm)$/i.test(n));
+     for(const name of markup){
+       const old=await zip.file(name).async("text");
+       let r={text:old,count:0};
+       if($("removeInlineJustify").checked&&$("removeAlignAttr").checked)r=removeInlineJustifyFromMarkup(old);
+       else if($("removeInlineJustify").checked){
+         let c=0;
+         const t=old.replace(/style\s*=\s*(["'])([\s\S]*?)\1/gi,(whole,q,value)=>{
+           const x=removeJustifyDeclarations(value);if(!x.count)return whole;c+=x.count;
+           const cleaned=x.text.replace(/^\s*;\s*|\s*;\s*$/g,"").trim();
+           return cleaned?`style=${q}${cleaned}${q}`:"";
+         });r={text:t,count:c};
+       }else{
+         let c=0;const t=old.replace(/\s+align\s*=\s*(["'])justify\1/gi,()=>{c++;return ""});r={text:t,count:c};
+       }
+       if(r.count){zip.file(name,r.text);markupFilesChanged++;inlineRemoved+=r.count;modified.push(name)}
+     }
+   }
+   // Validate mandatory EPUB structure.
+   const mt=await zip.file("mimetype")?.async("text");
+   if(mt!=="application/epub+zip")throw new Error("mimetype 내용이 올바르지 않습니다.");
+   const ct=await zip.file("META-INF/container.xml")?.async("text");
+   if(!ct)throw new Error("META-INF/container.xml이 없습니다.");
+   const cdoc=parseXML(ct,"container.xml");
+   const rf=descendants(cdoc,"rootfile")[0];if(!rf)throw new Error("OPF 경로를 찾을 수 없습니다.");
+   const opfPath=rf.getAttribute("full-path"),opfText=await zip.file(opfPath)?.async("text");
+   if(!opfText)throw new Error("OPF 파일이 없습니다.");
+   const odoc=parseXML(opfText,"OPF");
+   const opfDir2=dirname(opfPath),manifest2=firstDesc(odoc,"manifest"),spine2=firstDesc(odoc,"spine");
+   if(!manifest2||!spine2)throw new Error("OPF manifest 또는 spine이 없습니다.");
+   const ids=new Map();const missing=[];
+   for(const item of children(manifest2,"item")){
+     const id=item.getAttribute("id"),href=item.getAttribute("href");ids.set(id,href);
+     if(href&&!zip.file(join(opfDir2,href)))missing.push(href);
+   }
+   const bad=[];
+   for(const ref of children(spine2,"itemref"))if(!ids.has(ref.getAttribute("idref")))bad.push(ref.getAttribute("idref"));
+   if(missing.length||bad.length)throw new Error(`내부 검증 실패: manifest 누락 ${missing.length}, spine 오류 ${bad.length}`);
+   const cssAfter=listCssNames(zip);
+   if(JSON.stringify(cssBefore)!==JSON.stringify(cssAfter))throw new Error("CSS 파일 목록이 변경되었습니다.");
+   zip.file("mimetype","application/epub+zip",{compression:"STORE"});
+   status.textContent="수정본 EPUB 패키징 중...";
+   const blob=await zip.generateAsync({type:"blob",mimeType:"application/epub+zip",compression:"DEFLATE",compressionOptions:{level:6},platform:"UNIX"});
+   // Reopen generated output to check ZIP/XML again.
+   const check=await JSZip.loadAsync(await blob.arrayBuffer(),{checkCRC32:true});
+   const c2=parseXML(await check.file("META-INF/container.xml").async("text"),"완성 container.xml");
+   const rf2=descendants(c2,"rootfile")[0],op2=rf2.getAttribute("full-path");
+   parseXML(await check.file(op2).async("text"),"완성 OPF");
+   const url=URL.createObjectURL(blob);
+   const base=f.name.replace(/\.epub$/i,"").replace(/[\\/:*?"<>|]/g,"_");
+   result.innerHTML=`<div class="report"><p class="ok"><b>좌우 정렬 제거본 생성 완료</b></p>
+   <p>CSS ${cssBefore.length}개 유지 · 수정 CSS ${cssFilesChanged}개 · 제거한 CSS 선언 ${cssRulesRemoved}개<br/>
+   수정 XHTML/HTML ${markupFilesChanged}개 · 제거한 인라인/align 선언 ${inlineRemoved}개<br/>
+   manifest·spine·ZIP CRC·XML 검사 정상</p>
+   <a class="download" download="${esc(base)}_no_justify.epub" href="${url}">좌우 정렬 제거 EPUB 저장</a></div>`;
+   status.textContent=`완료
+원본 파일 수: ${names.length}
+CSS 파일 수: ${cssBefore.length} → ${cssAfter.length} (동일)
+수정 CSS: ${cssFilesChanged}
+제거 CSS 선언: ${cssRulesRemoved}
+수정 XHTML/HTML: ${markupFilesChanged}
+제거 인라인 선언: ${inlineRemoved}
+container.xml/OPF 파싱: 정상
+manifest/spine 검사: 정상
+ZIP CRC 검사: 정상`;
+ }catch(e){status.textContent="오류: "+e.message;console.error(e)}
+};
+
 
 $("resetBtn").onclick=()=>location.reload();
 </script>
