@@ -1,21 +1,23 @@
-# EPUB Studio Mobile v0.3
+# EPUB Studio Mobile v0.4
 
-## 기능 1: EPUB 만들기·합본
-- EPUB, TXT, ZIP(TXT) 입력
-- 대표 표지, 권별 표지 선택
-- 작품 설명은 캡처 이미지를 삽입하지 않고 붙여넣은 텍스트만 사용
-- 권→화 목차 배정
-- NAV/NCX/OPF 생성
-- 기본 XML/manifest/spine 검사
-- EPUB 다운로드
+## 주요 변경
+- 의미 없는 '작품 설명 참고 캡처' 입력란 제거
+- 작품 설명은 붙여넣은 텍스트만 사용
+- 각 권·외전·특별편별 표지 방식 선택
+  - 원본에서 자동 탐색
+  - 새 이미지 선택
+  - 표지 없음
+- 원본 EPUB 표지 후보 탐색
+  - EPUB3 cover-image
+  - EPUB2 meta cover
+  - guide cover
+  - cover/표지 파일명
+  - 이미지 전용 XHTML
+- 외전/특별편 인식 개선
+  - `3권`, `4권`은 상위 항목
+  - `[권] 외전`, `[권] 특별편`은 상위 항목
+  - `외전 1`, `외전 2`, `특별편 1`은 현재 권의 하위 화
+- 기존 좌우 정렬 제거 기능 유지
 
-## 기능 2: 좌우 정렬만 제거
-- 원본 EPUB의 모든 CSS 파일명·경로·개수 유지
-- CSS의 text-align: justify / text-align-last: justify 제거
-- XHTML/HTML 인라인 style과 align="justify" 제거
-- center/left/right 등 다른 정렬은 유지
-- manifest/spine/XML/ZIP CRC 검증 후 EPUB 다운로드
-
-## GitHub Pages
-저장소 root에 index.html과 .nojekyll을 업로드한 뒤
-Settings → Pages → Deploy from a branch → main → /(root)를 사용합니다.
+## GitHub Pages 업데이트
+저장소의 기존 index.html을 이 버전의 index.html로 교체하고 Commit changes를 누르세요.
