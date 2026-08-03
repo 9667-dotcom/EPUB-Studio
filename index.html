@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>EPUB Studio Mobile v2.5.1</title>
+<title>EPUB Studio Mobile v2.6</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -36,7 +36,7 @@ window.addEventListener("unhandledrejection",function(e){
 </script>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v2.5.1</h1><div class="sub">CSS 보존 우선 · 필요한 기능만 선택 실행</div></header>
+<header><h1>EPUB Studio Mobile v2.6</h1><div class="sub">CSS 보존 우선 · 필요한 기능만 선택 실행</div></header>
 <main>
 
 <div id="buildMode">
@@ -98,6 +98,16 @@ window.addEventListener("unhandledrejection",function(e){
 </div>
 <label class="section-toggle"><input id="enableTocWork" type="checkbox" checked> 목차·권 페이지 재구성 실행</label><div id="tocWorkBody">
 <textarea id="tocText" placeholder="1권&#10;1화&#10;2화&#10;&#10;2권&#10;3화&#10;4화&#10;&#10;[권] 외전&#10;외전 1화"></textarea>
+<p class="small">
+상위 권을 직접 지정하려면 <code>[권] 1권</code>, <code>[권] 외전</code>처럼 입력하세요.
+권 표시 없이 화 제목만 입력하면 현재 권 구조를 유지하면서 화 제목만 순서대로 적용합니다.
+목차 입력칸이 비어 있으면 <b>원본 목차로 자동 구성</b>을 사용하세요.
+</p>
+<div class="row" style="margin-top:8px">
+  <button id="addGroupBtn" type="button" class="light">+ 새 권 만들기</button>
+  <span class="small">새 권을 만든 뒤 각 화의 ‘다른 권으로 이동’에서 배치할 수 있습니다.</span>
+</div>
+
 <div class="row" style="margin-top:10px">
 <button id="applyTocBtn" disabled>목차 분석·본문 배정</button>
 <button id="autoOriginalBtn" class="light" disabled>원본 목차로 자동 구성</button>
@@ -114,6 +124,17 @@ window.addEventListener("unhandledrejection",function(e){
 </div>
 <p class="small">체크를 해제하면 해당 권의 목차와 새 화 시작점에서만 제외됩니다. 원문은 삭제되지 않고 이전 유효 화에 포함되며, 권 구분은 유지됩니다.</p>
 <div id="candidateReviewArea"></div>
+</section>
+
+
+<section id="newGroupCard" class="card hidden">
+<h2>새 권 만들기</h2>
+<label>권 제목</label>
+<input id="newGroupTitle" type="text" placeholder="예: 5권, 외전, 특별편">
+<div class="row" style="margin-top:10px">
+  <button id="confirmAddGroupBtn" type="button">권 추가</button>
+  <button id="cancelAddGroupBtn" type="button" class="secondary">취소</button>
+</div>
 </section>
 
 <section id="mappingCard" class="card hidden">
@@ -800,28 +821,45 @@ $("autoOriginalBtn").onclick=async()=>{
 
 $("applyTocBtn").onclick=()=>{
  try{
-  const groups=parseToc($("tocText").value); if(!groups.length)throw new Error("목차 텍스트를 입력하세요.");
+  const raw=$("tocText").value.trim();
+  if(!raw)throw new Error("목차 입력칸이 비어 있습니다. 원본 구조를 사용하려면 '원본 목차로 자동 구성'을 누르세요.");
+  const lines=raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  const hasExplicitGroup=lines.some(x=>groupHeading(x));
+
+  if(!hasExplicitGroup&&state.groups.length){
+   const chapters=state.groups.flatMap(g=>g.chapters);
+   if(lines.length!==chapters.length){
+    throw new Error(`화 제목 수가 기존 화 수와 다릅니다. 입력 ${lines.length}개 / 기존 ${chapters.length}개. 권을 새로 나누려면 [권] 표시를 사용하세요.`);
+   }
+   lines.forEach((title,i)=>chapters[i].title=title);
+   renderGroups();$("buildBtn").disabled=false;
+   setStatus(`화 제목 적용 완료\n기존 권 구조 유지: ${state.groups.length}개\n화 제목: ${lines.length}개`);
+   return;
+  }
+
+  const groups=parseToc(raw);
+  if(!groups.length)throw new Error("목차를 인식하지 못했습니다.");
   let n=0,lastIndex=-1;
   for(const g of groups)for(const ch of g.chapters){
-    let best=null,bestScore=-1;
-    const start=Math.max(0,lastIndex+1),end=Math.min(state.candidates.length,start+8);
-    for(let i=start;i<end;i++){
-      const sc=similarity(ch.title,state.candidates[i].title);
-      if(sc>bestScore){bestScore=sc;best=state.candidates[i]}
-    }
-    if(best&&bestScore>=0.55){
-      ch.sourceId=best.id;lastIndex=best.index;
-    }else{
-      const fallback=state.candidates[lastIndex+1]||null;
-      ch.sourceId=fallback?.id||null;
-      if(fallback)lastIndex=fallback.index;
-    }
-    n++;
+   let best=null,bestScore=-1;
+   const s=Math.max(0,lastIndex+1),e=Math.min(state.candidates.length,s+8);
+   for(let i=s;i<e;i++){
+    const sc=similarity(ch.title,state.candidates[i].title);
+    if(sc>bestScore){bestScore=sc;best=state.candidates[i]}
+   }
+   if(best&&bestScore>=0.55){ch.sourceId=best.id;lastIndex=best.index}
+   else{
+    const fallback=state.candidates[lastIndex+1]||null;
+    ch.sourceId=fallback?.id||null;
+    if(fallback)lastIndex=fallback.index;
+   }
+   n++;
   }
-  state.groups=maybeSortGroups(groups,"pasted");renderGroups();$("buildBtn").disabled=false;
+  state.groups=maybeSortGroups(groups,"pasted");
+  renderGroups();$("buildBtn").disabled=false;
   const st=mappingStats();
-  setStatus(`목차 분석 완료\n적용 기준: 붙여넣은 목차 순서 유지\n구분: ${state.groups.length}개\n붙여넣은 화: ${n}개\n본문 후보: ${state.candidates.length}\n일치 ${st.ok} · 유사 ${st.similar} · 불일치 ${st.bad} · 미배정 ${st.unmatched} · 미사용 원본 ${st.unused}`);
- }catch(e){setStatus("오류: "+e.message)}
+  setStatus(`목차 분석 완료\n적용 기준: 붙여넣은 목차 순서 유지\n권/구분: ${state.groups.length}개\n붙여넣은 화: ${n}개\n본문 후보: ${state.candidates.length}\n일치 ${st.ok} · 유사 ${st.similar} · 불일치 ${st.bad} · 미배정 ${st.unmatched} · 미사용 원본 ${st.unused}`);
+ }catch(e){setStatus("오류: "+e.message);console.error(e)}
 };
 
 
@@ -934,7 +972,7 @@ function renderGroups(){
       <input type="text" value="${esc(g.title)}" data-role="gtitle" style="font-weight:800;flex:1">
       <span class="badge">${g.chapters.length}화</span>
       <button type="button" class="light" data-role="up">↑</button>
-      <button type="button" class="light" data-role="down">↓</button>
+      <button type="button" class="light" data-role="down">↓</button><button type="button" class="secondary" data-role="deleteGroup">권 삭제</button>
     </div>
     <div class="cover-controls">
       <b>${esc(g.title)} 표지 설정</b>
@@ -964,6 +1002,10 @@ function renderGroups(){
   const preview=head.querySelector('[data-role="coverpreview"]');
   head.querySelector('[data-role="up"]').onclick=()=>{if(gi>0){[state.groups[gi-1],state.groups[gi]]=[state.groups[gi],state.groups[gi-1]];renderGroups()}};
   head.querySelector('[data-role="down"]').onclick=()=>{if(gi<state.groups.length-1){[state.groups[gi+1],state.groups[gi]]=[state.groups[gi],state.groups[gi+1]];renderGroups()}};
+  head.querySelector('[data-role="deleteGroup"]').onclick=()=>{
+   if(g.chapters.length&&!confirm(`${g.title}에 ${g.chapters.length}개 화가 있습니다. 권을 삭제하면 해당 화는 미배정됩니다. 계속할까요?`))return;
+   state.groups.splice(gi,1);renderGroups();
+  };
 
   titleInput.onchange=e=>{g.title=e.target.value;renderGroups()};
   function refresh(){
@@ -984,7 +1026,7 @@ function renderGroups(){
 
   const body=document.createElement("div");body.className="group-body";
   const table=document.createElement("table");
-  table.innerHTML="<thead><tr><th>이동</th><th>#</th><th>목차 제목</th><th>상태</th><th>연결할 원본 본문</th></tr></thead>";
+  table.innerHTML="<thead><tr><th>이동</th><th>#</th><th>목차 제목</th><th>상태</th><th>연결할 원본 본문</th><th>다른 권으로 이동</th></tr></thead>";
   const tb=document.createElement("tbody");
   g.chapters.forEach((ch,ci)=>{
    const tr=document.createElement("tr");tr.draggable=true;
@@ -1001,13 +1043,17 @@ function renderGroups(){
    const opts=[`<option value="">-- 미배정 --</option>`].concat(
     state.candidates.map(c=>`<option value="${esc(c.id)}" ${c.id===ch.sourceId?"selected":""}>${esc(c.title)} · ${esc(c.href)}</option>`)
    ).join("");
-   const ml=matchLabel(ch);
+   const ml=matchLabel(ch);const groupOpts=state.groups.map((x,i)=>`<option value="${i}" ${i===gi?"selected":""}>${esc(x.title)}</option>`).join("");
    tr.innerHTML=`<td><span class="drag-handle">☰</span><button type="button" class="light" data-role="cup">↑</button><button type="button" class="light" data-role="cdown">↓</button></td>
-   <td>${ci+1}</td><td><input type="text" value="${esc(ch.title)}"></td><td><span class="${ml.cls}">${ml.label}${ml.score?` ${Math.round(ml.score*100)}%`:""}</span></td><td><select class="chapter-select">${opts}</select></td>`;
+   <td>${ci+1}</td><td><input type="text" value="${esc(ch.title)}"></td><td><span class="${ml.cls}">${ml.label}${ml.score?` ${Math.round(ml.score*100)}%`:""}</span></td><td><select class="chapter-select">${opts}</select></td><td><select data-role="moveGroup">${groupOpts}</select></td>`;
    tr.querySelector("input").onchange=e=>{ch.title=e.target.value;renderGroups()};
    tr.querySelector("select").onchange=e=>{ch.sourceId=e.target.value||null;renderGroups()};
    tr.querySelector('[data-role="cup"]').onclick=()=>{if(ci>0){[g.chapters[ci-1],g.chapters[ci]]=[g.chapters[ci],g.chapters[ci-1]];renderGroups()}};
    tr.querySelector('[data-role="cdown"]').onclick=()=>{if(ci<g.chapters.length-1){[g.chapters[ci+1],g.chapters[ci]]=[g.chapters[ci],g.chapters[ci+1]];renderGroups()}};
+   tr.querySelector('[data-role="moveGroup"]').onchange=e=>{
+    const target=Number(e.target.value);if(target===gi)return;
+    const [moved]=g.chapters.splice(ci,1);state.groups[target].chapters.push(moved);renderGroups();
+   };
    tb.appendChild(tr);
   });
   table.appendChild(tb);body.appendChild(table);wrap.append(head,body);area.appendChild(wrap);
@@ -1473,6 +1519,21 @@ $("deselectAllCandidatesBtn").onclick=()=>{
 document.querySelectorAll('input[name="txtDetectMode"]').forEach(x=>x.addEventListener("change",rescanTxtWithCurrentPattern));
 $("customDetectPattern").addEventListener("change",()=>{if(currentTxtDetectMode()==="custom")rescanTxtWithCurrentPattern()});
 $("includeSpecialTitles").addEventListener("change",rescanTxtWithCurrentPattern);
+
+
+$("addGroupBtn").onclick=()=>{
+ $("newGroupTitle").value="";
+ $("newGroupCard").classList.remove("hidden");
+ $("newGroupCard").scrollIntoView({behavior:"smooth",block:"center"});
+};
+$("cancelAddGroupBtn").onclick=()=>$("newGroupCard").classList.add("hidden");
+$("confirmAddGroupBtn").onclick=()=>{
+ const title=$("newGroupTitle").value.trim();
+ if(!title)return alert("권 제목을 입력하세요.");
+ state.groups.push({title,chapters:[],coverFile:null,coverMode:"none",originalCoverHref:null});
+ $("newGroupCard").classList.add("hidden");
+ renderGroups();$("buildBtn").disabled=false;
+};
 
 $("resetBtn").onclick=()=>location.reload();
 </script>
