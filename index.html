@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>EPUB Studio Mobile v2.5</title>
+<title>EPUB Studio Mobile v2.5.1</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -36,7 +36,7 @@ window.addEventListener("unhandledrejection",function(e){
 </script>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v2.5</h1><div class="sub">CSS 보존 우선 · 필요한 기능만 선택 실행</div></header>
+<header><h1>EPUB Studio Mobile v2.5.1</h1><div class="sub">CSS 보존 우선 · 필요한 기능만 선택 실행</div></header>
 <main>
 
 <div id="buildMode">
@@ -112,7 +112,7 @@ window.addEventListener("unhandledrejection",function(e){
   <button id="selectAllCandidatesBtn" type="button" class="light">전체 사용</button>
   <button id="deselectAllCandidatesBtn" type="button" class="light">전체 제외</button>
 </div>
-<p class="small">체크를 해제하면 목차와 새 화 시작점에서만 제외됩니다. 해당 문구와 본문은 삭제되지 않고 이전 유효 화에 포함됩니다.</p>
+<p class="small">체크를 해제하면 해당 권의 목차와 새 화 시작점에서만 제외됩니다. 원문은 삭제되지 않고 이전 유효 화에 포함되며, 권 구분은 유지됩니다.</p>
 <div id="candidateReviewArea"></div>
 </section>
 
@@ -498,6 +498,45 @@ function splitTxtChaptersByMarkers(text,fileLabel,markers,enabledMap){
  }
  return out.filter(x=>x.content||x.title);
 }
+
+function rebuildTxtGroupsFromCurrentCandidates(){
+ if(state.inputType!=="txt"||!state.txtFiles.length)return;
+ if(state.txtFiles.length>1){
+  const byFile=new Map();
+  for(const file of state.txtFiles){
+   const info=file.volume||volumeInfoFromFilename(file.name);
+   byFile.set(file.name,{title:info.label,info,chapters:[]});
+  }
+  for(const c of state.candidates){
+   const entry=byFile.get(c.sourceFile);
+   if(entry)entry.chapters.push({title:c.title,sourceId:c.id});
+  }
+  const groups=maybeSortGroups([...byFile.values()],"zip")
+   .map(x=>({
+    title:x.title,
+    chapters:x.chapters,
+    coverFile:null,
+    coverMode:"none",
+    originalCoverHref:null
+   }))
+   .filter(g=>g.chapters.length);
+  state.groups=groups;
+  $("tocText").value=groups.map(g=>`${g.title}\n${g.chapters.map(c=>c.title).join("\n")}`).join("\n\n");
+ }else{
+  const oldTitle=state.groups[0]?.title||"본문";
+  state.groups=[{
+   title:oldTitle,
+   chapters:state.candidates.map(c=>({title:c.title,sourceId:c.id})),
+   coverFile:null,
+   coverMode:"none",
+   originalCoverHref:null
+  }];
+  $("tocText").value=state.candidates.map(c=>c.title).join("\n");
+ }
+ renderGroups();
+ $("buildBtn").disabled=false;
+}
+
 function rebuildTxtCandidatesFromSelections(){
  if(state.inputType!=="txt")return;
  const candidates=[];let n=0;
@@ -517,7 +556,9 @@ function rebuildTxtCandidatesFromSelections(){
  }
  state.candidates=candidates;state.spine=candidates;
  $("fileInfo").textContent=`${state.title} · TXT ${state.txtFiles.length}개 · 본문 후보 ${candidates.length}개`;
- setStatus(`TXT 화 후보 재구성 완료\n사용 중인 후보: ${candidates.length}개\n체크 해제한 표시는 원문에 남고 새 화 시작점으로 사용하지 않습니다.`);
+ rebuildTxtGroupsFromCurrentCandidates();
+ const order=state.groups.map(g=>g.title).join(" → ");
+ setStatus(`TXT 화 후보 재구성 완료\n권/구분: ${state.groups.length}개\n사용 중인 화 후보: ${candidates.length}개\n순서: ${order}\n체크 해제한 표시는 원문에 남고 새 화 시작점으로 사용하지 않습니다.`);
 }
 function renderCandidateReview(){
  const card=$("candidateReviewCard"),area=$("candidateReviewArea");
@@ -531,6 +572,7 @@ function renderCandidateReview(){
   row.querySelector("input").onchange=e=>{
    state.candidateSelections.set(c.key,e.target.checked);
    rebuildTxtCandidatesFromSelections();
+   renderCandidateReview();
   };
   area.appendChild(row);
  }
@@ -573,6 +615,7 @@ async function analyzeTxtInput(f){
  if(!$("bookTitle").value.trim())$("bookTitle").value=title;if(!$("bookCreator").value.trim())$("bookCreator").value=creator;
  $("fileInfo").textContent=`${title} · TXT ${files.length}개 · 본문 후보 ${candidates.length}개`;
  $("applyTocBtn").disabled=false;$("autoOriginalBtn").disabled=false;$("buildBtn").disabled=true;renderCandidateReview();
+ if(files.length>1)rebuildTxtGroupsFromCurrentCandidates();
  setStatus(`TXT 분석 완료\n작품명: ${title}\n작가: ${creator||"(직접 입력 가능)"}\nTXT 파일: ${files.length}\n본문 후보: ${candidates.length}\n권/구분 후보: ${files.map(x=>(x.volume||volumeInfoFromFilename(x.name)).label).join(" → ")}\n\n'원본 목차로 자동 구성'을 누르면 TXT 파일별로 권→화 구조를 만듭니다.`);
 }
 
