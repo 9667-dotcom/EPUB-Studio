@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>EPUB Studio Mobile v3.0.1</title>
+<title>EPUB Studio Mobile v3.1</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -64,7 +64,7 @@ window.addEventListener("unhandledrejection",function(e){
 </script>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v3.0.1</h1><div class="sub">CSS 보존 우선 · 필요한 기능만 선택 실행</div></header>
+<header><h1>EPUB Studio Mobile v3.1</h1><div class="sub">CSS 보존 우선 · 필요한 기능만 선택 실행</div></header>
 <main>
 
 <div id="buildMode">
@@ -133,7 +133,7 @@ window.addEventListener("unhandledrejection",function(e){
 </p>
 <div class="row" style="margin-top:8px">
   <button id="addGroupBtn" type="button" class="light">+ 새 권 만들기</button>
-  <span class="small">새 권을 만든 뒤 각 화의 ‘다른 권으로 이동’에서 배치할 수 있습니다.</span>
+  <span class="small">새 권을 만든 뒤 화마다 대상 권을 고르고 ‘이동’ 또는 ‘이 권으로 이동’을 눌러 배치합니다.</span>
 </div>
 
 <div class="row" style="margin-top:10px">
@@ -146,6 +146,7 @@ window.addEventListener("unhandledrejection",function(e){
 
 <section id="candidateReviewCard" class="card hidden">
 <h2>4-0. 감지된 화 후보 확인</h2>
+<p class="small">외전·특별편 TXT도 파일 내부의 #번호, 번호화, 제번호화 등을 화 후보로 인식합니다.</p>
 <div class="row">
   <button id="selectAllCandidatesBtn" type="button" class="light">전체 사용</button>
   <button id="deselectAllCandidatesBtn" type="button" class="light">전체 제외</button>
@@ -309,7 +310,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <script>
 "use strict";
 const $=id=>document.getElementById(id);
-let state={inputType:null,zip:null,originalBytes:null,opfPath:"",opfDir:"",opfDoc:null,manifest:new Map(),spine:[],candidates:[],groups:[],title:"",creator:"",navHref:null,ncxHref:null,txtFiles:[],coverCandidates:[],sourceCoverByGroup:new Map()};
+let state={inputType:null,zip:null,originalBytes:null,opfPath:"",opfDir:"",opfDoc:null,manifest:new Map(),spine:[],candidates:[],groups:[],title:"",creator:"",navHref:null,ncxHref:null,txtFiles:[],coverCandidates:[],sourceCoverByGroup:new Map(),manualGrouping:false};
 
 function log(msg){$("status").textContent += "\n"+msg; $("status").scrollTop=$("status").scrollHeight}
 function setStatus(msg){$("status").textContent=msg}
@@ -335,6 +336,15 @@ function parseAuthorTitleFromFilename(name){
  if(m)return {author:m[1].trim(),title:cleanBookTitleFromFilename(m[2])};
  return {author:"",title:cleanBookTitleFromFilename(base)};
 }
+
+function normalizedVolumeKey(name){
+ const info=volumeInfoFromFilename(name);
+ return `${info.kind}:${info.number}:${info.label}`;
+}
+function isSupplementVolumeName(name){
+ return /(?:외전|번외|특별편|special|side\s*story|after\s*story|후일담)/i.test(String(name||""));
+}
+
 function volumeInfoFromFilename(name){
  const base=stripKnownExtension(name).normalize("NFC");
  const num=base.match(/(?:^|\s)(\d+)\s*권(?:\s|$|\()/i);
@@ -541,7 +551,7 @@ function currentTxtDetectMode(){
  return document.querySelector('input[name="txtDetectMode"]:checked')?.value||"auto";
 }
 function specialTitleLine(s){
- return /^(?:프롤로그|prologue|에필로그|epilogue|후기|후일담|서장|종장|막간|interlude|외전(?:\s*\d+)?(?:\s*화)?|특별편(?:\s*\d+)?|번외편?(?:\s*\d+)?|special(?:\s*\d+)?|side\s*story(?:\s*\d+)?)$/i.test(s);
+ return /^(?:프롤로그|prologue|에필로그|epilogue|후기|후일담|서장|종장|막간|interlude|외전(?:\s*(?:#?\d+|제?\s*\d+\s*화))?|외전\s*[-_:]\s*.+|특별편(?:\s*(?:#?\d+|제?\s*\d+\s*화))?|번외편?(?:\s*(?:#?\d+|제?\s*\d+\s*화))?|special(?:\s*(?:#?\d+))?|side\s*story(?:\s*(?:#?\d+))?|after\s*story(?:\s*(?:#?\d+))?)$/i.test(s);
 }
 function chapterLine(line){
  const s=line.trim();
@@ -560,12 +570,20 @@ function chapterLine(line){
 }
 function scanTxtMarkers(text,fileName){
  const lines=normalizeTxt(text).split("\n"),out=[];
+ const supplemental=isSupplementVolumeName(fileName);
  for(let i=0;i<lines.length;i++){
-  if(chapterLine(lines[i]))out.push({
+  const s=lines[i].trim();
+  let matched=chapterLine(s);
+  // 외전/특별편 파일은 내부의 일반 화 표기(#1, 1화 등)도 반드시 후보로 취급
+  if(!matched&&supplemental){
+   matched=/^(?:#\s*\d+|제?\s*\d+\s*화|chapter\s*\d+)$/i.test(s);
+  }
+  if(matched)out.push({
    key:`${fileName}::${i}`,
-   title:lines[i].trim(),
+   title:s,
    lineIndex:i,
-   sourceFile:fileName
+   sourceFile:fileName,
+   sourceVolume:(volumeInfoFromFilename(fileName)).label
   });
  }
  return out;
@@ -589,6 +607,7 @@ function splitTxtChaptersByMarkers(text,fileLabel,markers,enabledMap){
 
 function rebuildTxtGroupsFromCurrentCandidates(){
  if(state.inputType!=="txt"||!state.txtFiles.length)return;
+ if(state.manualGrouping)return;
  if(state.txtFiles.length>1){
   const byFile=new Map();
   for(const file of state.txtFiles){
@@ -644,7 +663,21 @@ function rebuildTxtCandidatesFromSelections(){
  }
  state.candidates=candidates;state.spine=candidates;
  $("fileInfo").textContent=`${state.title} · TXT ${state.txtFiles.length}개 · 본문 후보 ${candidates.length}개`;
- rebuildTxtGroupsFromCurrentCandidates();
+ if(state.manualGrouping){
+  const validIds=new Set(candidates.map(c=>c.id));
+  // 후보 재분할 뒤 sourceId가 바뀔 수 있으므로 같은 원본 파일/제목으로 다시 연결
+  for(const g of state.groups){
+   for(const ch of g.chapters){
+    if(ch.sourceId&&validIds.has(ch.sourceId))continue;
+    const best=candidates.find(c=>c.title===ch.title)||
+               candidates.find(c=>similarity(c.title,ch.title)>=0.9);
+    ch.sourceId=best?.id||null;
+   }
+  }
+  renderGroups();
+ }else{
+  rebuildTxtGroupsFromCurrentCandidates();
+ }
  const order=state.groups.map(g=>g.title).join(" → ");
  setStatus(`TXT 화 후보 재구성 완료\n권/구분: ${state.groups.length}개\n사용 중인 화 후보: ${candidates.length}개\n순서: ${order}\n체크 해제한 표시는 원문에 남고 새 화 시작점으로 사용하지 않습니다.`);
 }
@@ -699,7 +732,7 @@ async function analyzeTxtInput(f){
  }
  const title=$("bookTitle").value.trim()||parseAuthorTitleFromFilename(f.name).title||f.name.replace(/\.(txt|zip)$/i,"");
  const creator=$("bookCreator").value.trim();
- state={inputType:"txt",zip:null,originalBytes:null,opfPath:"OEBPS/content.opf",opfDir:"OEBPS/",opfDoc:null,manifest:new Map(),spine:candidates,candidates,groups:[],title,creator,navHref:"nav.xhtml",ncxHref:"toc.ncx",txtFiles:files,rawTxtMarkers,candidateSelections,coverCandidates:[],sourceCoverByGroup:new Map()};
+ state={inputType:"txt",zip:null,originalBytes:null,opfPath:"OEBPS/content.opf",opfDir:"OEBPS/",opfDoc:null,manifest:new Map(),spine:candidates,candidates,groups:[],title,creator,navHref:"nav.xhtml",ncxHref:"toc.ncx",txtFiles:files,rawTxtMarkers,candidateSelections,coverCandidates:[],sourceCoverByGroup:new Map(),manualGrouping:false};
  if(!$("bookTitle").value.trim())$("bookTitle").value=title;if(!$("bookCreator").value.trim())$("bookCreator").value=creator;
  $("fileInfo").textContent=`${title} · TXT ${files.length}개 · 본문 후보 ${candidates.length}개`;
  $("applyTocBtn").disabled=false;$("autoOriginalBtn").disabled=false;$("buildBtn").disabled=true;renderCandidateReview();
@@ -737,7 +770,7 @@ $("analyzeBtn").onclick=async()=>{
   const candidates=spine.filter((it,i)=>/xhtml|html/.test(it.media||"")&&!isLikelyNonBody(it,it.title,i));
   const metadata=firstDesc(opf,"metadata"); const titleEl=metadata&&descendants(metadata,"title")[0],creatorEl=metadata&&descendants(metadata,"creator")[0];
   const title=titleEl?.textContent?.trim()||f.name.replace(/\.epub$/i,""),creator=creatorEl?.textContent?.trim()||"";
-  state={inputType:"epub",zip,originalBytes:bytes,opfPath,opfDir,opfDoc:opf,manifest,spine,candidates,groups:[],title,creator,navHref:null,ncxHref:null,txtFiles:[],coverCandidates:[],sourceCoverByGroup:new Map()};
+  state={inputType:"epub",zip,originalBytes:bytes,opfPath,opfDir,opfDoc:opf,manifest,spine,candidates,groups:[],title,creator,navHref:null,ncxHref:null,txtFiles:[],coverCandidates:[],sourceCoverByGroup:new Map(),manualGrouping:false};
   if(!$("bookTitle").value.trim())$("bookTitle").value=title;if(!$("bookCreator").value.trim())$("bookCreator").value=creator;
   for(const it of manifest.values()){if((it.properties||"").split(/\s+/).includes("nav"))state.navHref=it.href;if(it.media==="application/x-dtbncx+xml")state.ncxHref=it.href}
   $("fileInfo").textContent=`${state.title} · spine ${spine.length}개 · 본문 후보 ${candidates.length}개`;
@@ -836,6 +869,7 @@ async function extractOriginalHierarchicalGroups(){
 
 $("autoOriginalBtn").onclick=async()=>{
  try{
+  state.manualGrouping=false;
   // ZIP(TXT) 또는 여러 TXT는 파일 하나를 상위 권으로 사용한다.
   if(state.inputType==="txt"&&state.txtFiles.length>1){
    const byFile=new Map();
@@ -922,7 +956,7 @@ $("applyTocBtn").onclick=()=>{
    }
    n++;
   }
-  state.groups=maybeSortGroups(groups,"pasted");
+  state.groups=maybeSortGroups(groups,"pasted");state.manualGrouping=true;
   renderGroups();$("buildBtn").disabled=false;
   const st=mappingStats();
   setStatus(`목차 분석 완료\n적용 기준: 붙여넣은 목차 순서 유지\n권/구분: ${state.groups.length}개\n붙여넣은 화: ${n}개\n본문 후보: ${state.candidates.length}\n일치 ${st.ok} · 유사 ${st.similar} · 불일치 ${st.bad} · 미배정 ${st.unmatched} · 미사용 원본 ${st.unused}`);
@@ -1125,7 +1159,10 @@ function renderMobileTree(){
     <input type="text" data-role="mobileTitle" value="${esc(ch.title)}" aria-label="목차 표시 제목">
     <button type="button" class="light" data-role="preview">본문 5줄 보기</button>
    </div>
-   <select data-role="move">${state.groups.map((x,i)=>`<option value="${i}" ${i===gi?"selected":""}>${esc(x.title)}</option>`).join("")}</select>`;
+   <div>
+    <select data-role="move">${state.groups.map((x,i)=>`<option value="${i}" ${i===gi?"selected":""}>${esc(x.title)}</option>`).join("")}</select>
+    <button type="button" class="light" data-role="moveBtn">이 권으로 이동</button>
+   </div>`;
    row.querySelector('[data-role="mobileTitle"]').oninput=e=>{
     ch.title=e.target.value;
     row.dataset.title=ch.title.toLowerCase();
@@ -1172,6 +1209,20 @@ function compareResultSummary(){
   groups:state.groups.length,
   chapters:state.groups.reduce((n,g)=>n+g.chapters.length,0)
  };
+}
+
+
+function moveChapterToGroup(fromGroupIndex,chapterIndex,targetGroupIndex){
+ if(fromGroupIndex===targetGroupIndex)return;
+ const from=state.groups[fromGroupIndex],target=state.groups[targetGroupIndex];
+ if(!from||!target||!from.chapters[chapterIndex])return;
+ snapshotEditor?.("before-move");
+ const [moved]=from.chapters.splice(chapterIndex,1);
+ target.chapters.push(moved);
+ state.manualGrouping=true;
+ renderGroups();
+ snapshotEditor?.("after-move");
+ setStatus(`화 이동 완료\n${moved.title}\n${from.title} → ${target.title}`);
 }
 
 function renderGroups(){
@@ -1277,7 +1328,7 @@ function renderGroups(){
    ).join("");
    const ml=matchLabel(ch);const groupOpts=state.groups.map((x,i)=>`<option value="${i}" ${i===gi?"selected":""}>${esc(x.title)}</option>`).join("");
    tr.innerHTML=`<td><span class="drag-handle">☰</span><button type="button" class="light" data-role="cup">↑</button><button type="button" class="light" data-role="cdown">↓</button></td>
-   <td>${ci+1}</td><td><input type="text" value="${esc(ch.title)}"></td><td><span class="${ml.cls}">${ml.label}${ml.score?` ${Math.round(ml.score*100)}%`:""}</span></td><td><select class="chapter-select">${opts}</select></td><td><select data-role="moveGroup">${groupOpts}</select></td>`;
+   <td>${ci+1}</td><td><input type="text" value="${esc(ch.title)}"></td><td><span class="${ml.cls}">${ml.label}${ml.score?` ${Math.round(ml.score*100)}%`:""}</span></td><td><select class="chapter-select">${opts}</select></td><td><select data-role="moveGroup">${groupOpts}</select><button type="button" class="light" data-role="moveGroupBtn">이동</button></td>`;
    tr.querySelector("input").oninput=e=>{
     ch.title=e.target.value;
     const status=tr.querySelector("[data-role='titleSaved']");
@@ -1289,8 +1340,8 @@ function renderGroups(){
    tr.querySelector('[data-role="cup"]').onclick=()=>{if(ci>0){[g.chapters[ci-1],g.chapters[ci]]=[g.chapters[ci],g.chapters[ci-1]];renderGroups()}};
    tr.querySelector('[data-role="cdown"]').onclick=()=>{if(ci<g.chapters.length-1){[g.chapters[ci+1],g.chapters[ci]]=[g.chapters[ci],g.chapters[ci+1]];renderGroups()}};
    tr.querySelector('[data-role="moveGroup"]').onchange=e=>{
-    const target=Number(e.target.value);if(target===gi)return;
-    const [moved]=g.chapters.splice(ci,1);state.groups[target].chapters.push(moved);renderGroups();
+    const target=Number(e.target.value);
+    moveChapterToGroup(gi,ci,target);
    };
    tb.appendChild(tr);
   });
@@ -1789,7 +1840,7 @@ $("cancelAddGroupBtn").onclick=()=>$("newGroupCard").classList.add("hidden");
 $("confirmAddGroupBtn").onclick=()=>{
  const title=$("newGroupTitle").value.trim();
  if(!title)return alert("권 제목을 입력하세요.");
- snapshotEditor("before-add-group");state.groups.push({title,chapters:[],coverFile:null,coverMode:"none",originalCoverHref:null});snapshotEditor("after-add-group");
+ snapshotEditor("before-add-group");state.groups.push({title,chapters:[],coverFile:null,coverMode:"none",originalCoverHref:null});state.manualGrouping=true;snapshotEditor("after-add-group");
  $("newGroupCard").classList.add("hidden");
  renderGroups();$("buildBtn").disabled=false;
 };
