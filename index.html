@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>EPUB Studio Mobile v6.1.0</title>
+<title>EPUB Studio Mobile v6.1.1</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -72,7 +72,7 @@ window.addEventListener("unhandledrejection",function(e){
 </script>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v6.1.0</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본</div></header>
+<header><h1>EPUB Studio Mobile v6.1.1</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본</div></header>
 <main>
 
 <div id="buildMode">
@@ -98,7 +98,8 @@ window.addEventListener("unhandledrejection",function(e){
 </div></section>
 
 <section class="card">
-<h2>3. 작품 설명</h2><label class="section-toggle"><input id="enableDescriptionWork" type="checkbox" checked> 작품 설명 작업 실행</label><div id="descriptionWorkBody">
+<h2>3. 작품 설명</h2>
+<p class="small">작품 소개·BL 가이드·작품 정보의 내용은 입력한 줄바꿈대로만 표시됩니다. 문장 속 ‘공’, ‘수’, ‘키워드’ 등을 자동 소제목으로 분리하지 않습니다.</p><label class="section-toggle"><input id="enableDescriptionWork" type="checkbox" checked> 작품 설명 작업 실행</label><div id="descriptionWorkBody">
 <label>작품 설명 맨 위 이미지 <span class="small">(선택 사항·여러 장 가능)</span></label>
 <input id="descImages" type="file" accept="image/*" multiple>
 <p class="small">선택한 이미지는 최종 EPUB의 작품 설명 페이지 맨 위에 순서대로 실제 삽입됩니다. OCR은 하지 않습니다.</p>
@@ -753,36 +754,20 @@ function normalizeDescriptionText(text){
   .trim();
 }
 function descriptionLabelInfo(line){
- const m=String(line||"").trim().match(/^(작품\s*소개|BL\s*가이드|배경\s*\/?\s*분야|작품\s*키워드|키워드|공|수|서브공|이럴\s*때\s*보세요|공감\s*글귀|분량\s*안내)\s*[:：]?\s*(.*)$/i);
- if(!m)return null;
- return {label:m[1].replace(/\s+/g," ").trim(),rest:m[2].trim()};
+ // v6.1.1: 작품 설명 본문 안의 단어를 임의 소제목으로 해석하지 않는다.
+ return null;
 }
 function descriptionTextToHtml(text){
  const normalized=normalizeDescriptionText(text);
  if(!normalized)return "";
- const lines=normalized.split("\n");
- const out=[];
- let paragraph=[];
- const flush=()=>{
-  if(!paragraph.length)return;
-  out.push(`<p>${paragraph.map(x=>esc(x)).join("<br/>")}</p>`);
-  paragraph=[];
- };
- for(const raw of lines){
-  const line=raw.trim();
-  if(!line){flush();continue}
-  const label=descriptionLabelInfo(line);
-  if(label){
-   flush();
-   out.push(`<h3>${esc(label.label)}</h3>`);
-   if(label.rest)out.push(`<p>${esc(label.rest)}</p>`);
-   continue;
-  }
-  paragraph.push(raw.trim());
- }
- flush();
- return out.join("");
+ const blocks=normalized.split(/\n{2,}/);
+ return blocks.map(block=>{
+  const lines=block.split("\n").map(x=>x.trim()).filter(Boolean);
+  if(!lines.length)return "";
+  return `<p>${lines.map(x=>esc(x)).join("<br/>")}</p>`;
+ }).join("");
 }
+
 function descriptionSectionsHtml(){
  const intro=normalizeDescriptionText(cleanDescription($("workIntro").value));
  const guide=normalizeDescriptionText(cleanDescription($("blGuide").value));
@@ -1966,7 +1951,7 @@ function makeGenerationReport(extra={}){
  const chapterCount=state.groups.reduce((n,g)=>n+g.chapters.length,0);
  const issues=analyzeProjectIssues();
  const lines=[
-  `EPUB Studio Mobile v6.1.0 생성 리포트`,
+  `EPUB Studio Mobile v6.1.1 생성 리포트`,
   `작품명: ${$("bookTitle").value.trim()}`,
   `작가명: ${$("bookCreator").value.trim()||"(없음)"}`,
   `권/구분: ${state.groups.length}개`,
