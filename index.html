@@ -73,8 +73,8 @@ window.addEventListener("unhandledrejection",function(e){
 <div id="buildMode">
 <section class="card">
 <h2>1. 원본 파일 분석</h2>
-<label>입력 파일 <span class="small">(.epub, .txt, TXT가 들어 있는 .zip)</span></label>
-<input id="epubFile" type="file" accept=".epub,.txt,.zip,application/epub+zip,text/plain,application/zip">
+<label>입력 파일 <span class="small">(.epub, .txt, TXT가 들어 있는 .zip · TXT는 여러 개 선택 가능)</span></label>
+<input id="epubFile" type="file" multiple accept=".epub,.txt,.zip,application/epub+zip,text/plain,application/zip">
 <div class="row">
   <div style="flex:1;min-width:180px"><p class="small">파일명이 <code>[작가명]작품명</code> 형식이면 작가명과 작품명을 자동 입력하며, 아래에서 수정할 수 있습니다.</p><label>작품명</label><input id="bookTitle" type="text" placeholder="TXT 입력 시 파일명에서 자동 입력"></div>
   <div style="flex:1;min-width:180px"><label>작가명</label><input id="bookCreator" type="text" placeholder="직접 입력 가능"></div>
@@ -755,16 +755,24 @@ function txtBodyHtml(text){
   return `<p>${lines.map(esc).join("<br/>")}</p>`;
  }).join("\n");
 }
-async function analyzeTxtInput(f){
- const ext=(f.name.split(".").pop()||"").toLowerCase(),files=[];
- if(ext==="txt"){
-  files.push({name:f.name,text:decodeText(await f.arrayBuffer(),$("txtEncoding").value),volume:volumeInfoFromFilename(f.name)});
- }else{
-  const z=await JSZip.loadAsync(await f.arrayBuffer(),{checkCRC32:true});
-  const names=Object.keys(z.files).filter(n=>!z.files[n].dir&&/\.txt$/i.test(n)).sort((a,b)=>a.localeCompare(b,"ko",{numeric:true}));
-  if(!names.length)throw new Error("ZIP 안에 TXT 파일이 없습니다. EPUB이 들어 있는 ZIP 합본은 아직 지원하지 않습니다.");
-  for(const name of names)files.push({name,text:decodeText(await z.file(name).async("uint8array"),$("txtEncoding").value),volume:volumeInfoFromFilename(name)});
+async function analyzeTxtInput(input){
+ const inputs=Array.isArray(input)?input:[input];
+ const first=inputs[0];
+ const files=[];
+ for(const f of inputs){
+  const ext=(f.name.split(".").pop()||"").toLowerCase();
+  if(ext==="zip"){
+   const z=await JSZip.loadAsync(await f.arrayBuffer(),{checkCRC32:true});
+   const names=Object.keys(z.files).filter(n=>!z.files[n].dir&&/\.txt$/i.test(n)).sort((a,b)=>a.localeCompare(b,"ko",{numeric:true}));
+   if(!names.length)throw new Error("ZIP 안에 TXT 파일이 없습니다. EPUB이 들어 있는 ZIP 합본은 아직 지원하지 않습니다.");
+   for(const name of names)files.push({name,text:decodeText(await z.file(name).async("uint8array"),$("txtEncoding").value),volume:volumeInfoFromFilename(name)});
+  }else if(ext==="txt"){
+   files.push({name:f.name,text:decodeText(await f.arrayBuffer(),$("txtEncoding").value),volume:volumeInfoFromFilename(f.name)});
+  }else{
+   throw new Error("여러 파일을 올릴 때는 TXT(또는 TXT가 든 ZIP)만 지원합니다: "+f.name);
+  }
  }
+ if(!files.length)throw new Error("읽을 TXT 파일을 찾지 못했습니다.");
  files.sort((a,b)=>compareVolumeInfo(a.volume||volumeInfoFromFilename(a.name),b.volume||volumeInfoFromFilename(b.name)));
  const rawTxtMarkers=[];const candidateSelections=new Map();
  for(const file of files){
@@ -779,7 +787,7 @@ async function analyzeTxtInput(f){
    n++;candidates.push({id:"txt_"+String(n).padStart(5,"0"),href:"Text/chapter_"+String(n).padStart(5,"0")+".xhtml",media:"application/xhtml+xml",title:part.title,index:n-1,linear:"yes",content:part.content,sourceFile:file.name,sourceVolume:(file.volume||volumeInfoFromFilename(file.name)).label});
   }
  }
- const title=$("bookTitle").value.trim()||parseAuthorTitleFromFilename(f.name).title||f.name.replace(/\.(txt|zip)$/i,"");
+ const title=$("bookTitle").value.trim()||parseAuthorTitleFromFilename(first.name).title||first.name.replace(/\.(txt|zip)$/i,"");
  const creator=$("bookCreator").value.trim();
  state={inputType:"txt",zip:null,originalBytes:null,opfPath:"OEBPS/content.opf",opfDir:"OEBPS/",opfDoc:null,manifest:new Map(),spine:candidates,candidates,groups:[],title,creator,navHref:"nav.xhtml",ncxHref:"toc.ncx",txtFiles:files,rawTxtMarkers,candidateSelections,coverCandidates:[],sourceCoverByGroup:new Map(),manualGrouping:false};
  if(!$("bookTitle").value.trim())$("bookTitle").value=title;if(!$("bookCreator").value.trim())$("bookCreator").value=creator;
@@ -792,12 +800,14 @@ async function analyzeTxtInput(f){
 $("analyzeBtn").onclick=async()=>{
  $("fileInfo").textContent="분석 중...";setStatus("원본 파일 분석을 시작합니다...");
  try{
-  const f=$("epubFile").files[0]; if(!f)throw new Error("원본 파일을 선택하세요.");
+  const fl=[...$("epubFile").files]; if(!fl.length)throw new Error("원본 파일을 선택하세요.");
+  const f=fl[0];
   const filenameMeta=parseAuthorTitleFromFilename(f.name);
   if(filenameMeta.author)$("bookCreator").value=filenameMeta.author;
   if(filenameMeta.title)$("bookTitle").value=filenameMeta.title;
   const ext=(f.name.split(".").pop()||"").toLowerCase();
   setStatus(`원본 파일 읽는 중...\n파일명 인식: 작가 ${filenameMeta.author||"(없음)"} / 작품 ${filenameMeta.title||"(없음)"}`);
+  if(fl.length>1){await analyzeTxtInput(fl);return}
   if(ext==="txt"||ext==="zip"){await analyzeTxtInput(f);return}
   if(ext!=="epub")throw new Error("지원 형식은 EPUB, TXT, ZIP(TXT)입니다.");
   const bytes=await f.arrayBuffer(); const zip=await JSZip.loadAsync(bytes,{checkCRC32:true});
@@ -1607,7 +1617,7 @@ async function buildTxtEpub(){
  const zip=new JSZip();
  zip.file("mimetype","application/epub+zip",{compression:"STORE"});
  zip.file("META-INF/container.xml",`<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`);
- const css=`html,body{margin:0;padding:0}body{line-height:1.8;text-align:left;word-break:keep-all;overflow-wrap:normal;-webkit-hyphens:none;hyphens:none;padding:1.2em}p{margin:.65em 0;text-indent:1em;text-align:left}h1,h2{text-indent:0}.title-page,.cover-page{display:flex;min-height:94vh;align-items:center;justify-content:center;text-align:center;padding:0}.cover-page img,.hm-desc-section{margin:1.5em 0}.hm-desc-section h1{font-size:1.25em;margin:1.2em 0 .7em}.desc-img{display:block;max-width:100%;height:auto;margin:0 auto}.hm-desc-section{margin:1.5em 0}.hm-desc-section h1{font-size:1.25em;margin:1.2em 0 .7em}.desc-img{margin-bottom:1.2em}.desc h2,.hm-desc-section h2{font-size:1.05em;font-weight:700;margin:1.1em 0 .35em}.chapter-title{margin:0 0 1.2em;text-align:center}`;
+ const css=`html,body{margin:0;padding:0}body{line-height:1.8;text-align:left!important;word-break:keep-all!important;overflow-wrap:normal;-webkit-hyphens:none;hyphens:none;padding:1.2em}p{margin:.65em 0;text-indent:1em;text-align:left!important;word-break:keep-all!important}h1,h2{text-indent:0}.title-page,.cover-page{display:flex;min-height:94vh;align-items:center;justify-content:center;text-align:center;padding:0}.cover-page img,.hm-desc-section{margin:1.5em 0}.hm-desc-section h1{font-size:1.25em;margin:1.2em 0 .7em}.desc-img{display:block;max-width:100%;height:auto;margin:0 auto}.hm-desc-section{margin:1.5em 0}.hm-desc-section h1{font-size:1.25em;margin:1.2em 0 .7em}.desc-img{margin-bottom:1.2em}.desc h2,.hm-desc-section h2{font-size:1.05em;font-weight:700;margin:1.1em 0 .35em}.chapter-title{margin:0 0 1.2em;text-align:center}`;
  zip.file("OEBPS/Styles/book.css",css);
  const manifest=[],spine=[],navGroups=[];let manifestNo=0;
  const add=(id,href,media,props="")=>manifest.push({id,href,media,props});
@@ -1702,7 +1712,7 @@ $("buildBtn").onclick=async()=>{
   const opf=parseXML(await zip.file(state.opfPath).async("text"),"OPF");
   const manifestEl=firstDesc(opf,"manifest"),spineEl=firstDesc(opf,"spine"),metadataEl=firstDesc(opf,"metadata");
   const base="HMBuilder/"; const cssHref=base+"hm_builder.css"; const cssFull=join(state.opfDir,cssHref);
-  zip.file(cssFull,`html,body{margin:0;padding:0}body{text-align:left;word-break:keep-all;overflow-wrap:normal;-webkit-hyphens:none;hyphens:none}p{text-align:left}body.hm-title{display:flex;min-height:95vh;align-items:center;justify-content:center;text-align:center}h1{font-size:2em}body.hm-desc{padding:1.2em;line-height:1.75}body.hm-desc h2{font-size:1.25em;margin:1.5em 0 .6em}body.hm-desc p{margin:.45em 0}.hm-desc-section{margin:1.5em 0}.hm-desc-section h1{font-size:1.25em;margin:1.2em 0 .7em}.hm-img{display:block;max-width:100%;height:auto;margin:0 auto 1.2em}.hm-cover{display:flex;min-height:98vh;align-items:center;justify-content:center}.hm-cover img{display:block;max-width:100%;max-height:98vh;width:auto;height:auto}.hm-desc-section h2{font-size:1.05em;font-weight:700;margin:1.1em 0 .35em}`);
+  zip.file(cssFull,`html,body{margin:0;padding:0}body{text-align:left!important;word-break:keep-all!important;overflow-wrap:normal;-webkit-hyphens:none;hyphens:none}p{text-align:left!important;word-break:keep-all!important}body.hm-title{display:flex;min-height:95vh;align-items:center;justify-content:center;text-align:center}h1{font-size:2em}body.hm-desc{padding:1.2em;line-height:1.75}body.hm-desc h2{font-size:1.25em;margin:1.5em 0 .6em}body.hm-desc p{margin:.45em 0}.hm-desc-section{margin:1.5em 0}.hm-desc-section h1{font-size:1.25em;margin:1.2em 0 .7em}.hm-img{display:block;max-width:100%;height:auto;margin:0 auto 1.2em}.hm-cover{display:flex;min-height:98vh;align-items:center;justify-content:center}.hm-cover img{display:block;max-width:100%;max-height:98vh;width:auto;height:auto}.hm-desc-section h2{font-size:1.05em;font-weight:700;margin:1.1em 0 .35em}`);
   const cssId=uniqueId(opf,"hm_css");addManifestItem(opf,manifestEl,cssId,cssHref,"text/css");
 
   let newSpine=[];
