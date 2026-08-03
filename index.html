@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>EPUB Studio Mobile v7.0</title>
+<title>EPUB Studio Mobile v7.2.1</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -27,8 +27,12 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px
 .report{font-size:12px;line-height:1.6}code{background:#f0f1f3;padding:1px 4px;border-radius:4px}.active-mode{background:#087a2f!important}.download{display:inline-block;text-decoration:none;margin-top:10px;background:#087a2f;color:#fff;padding:12px 16px;border-radius:9px;font-weight:800}
 details summary{cursor:pointer;font-weight:700}
 
-.mobile-toolbar{position:sticky;bottom:0;z-index:30;background:rgba(255,255,255,.97);border-top:1px solid #d8dce5;padding:8px;display:flex;gap:7px;overflow-x:auto}
-.mobile-toolbar button{min-width:96px;min-height:44px;flex:0 0 auto}
+.mobile-toolbar{position:fixed;left:0;right:0;bottom:0;z-index:80;background:rgba(255,255,255,.98);border-top:1px solid #d8dce5;padding:7px max(7px,env(safe-area-inset-right)) calc(7px + env(safe-area-inset-bottom)) max(7px,env(safe-area-inset-left));display:flex;gap:6px;overflow-x:auto;box-shadow:0 -4px 18px rgba(0,0,0,.08)}
+.mobile-toolbar button{min-width:82px;min-height:44px;flex:1 0 82px;padding:8px 6px;font-size:.92rem;white-space:nowrap}
+.mobile-toolbar button.active{background:#1769e0;color:#fff;border-color:#1769e0}
+body{padding-bottom:calc(78px + env(safe-area-inset-bottom))}
+.app-step{scroll-margin-top:84px;scroll-margin-bottom:92px}
+.nav-focus{outline:3px solid rgba(23,105,224,.28);outline-offset:3px}
 .preview-panel{border:1px solid #d8dce5;border-radius:10px;padding:10px;background:#fff;margin-top:8px}
 .preview-lines{white-space:pre-wrap;line-height:1.55;max-height:12em;overflow:auto;background:#f7f8fa;padding:10px;border-radius:8px}
 .tree-group{border:1px solid #dfe3eb;border-radius:10px;margin:8px 0;background:#fff}
@@ -75,11 +79,11 @@ window.addEventListener("unhandledrejection",function(e){
 </script>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v7.0</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본 · build 7.0</div></header>
+<header><h1>EPUB Studio Mobile v7.2.1</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본 · build 7.1.0</div></header>
 <main>
 
 <div id="buildMode">
-<section class="card">
+<section id="stepOriginal" class="card app-step">
 <h2>1. 원본 파일 분석</h2>
 <label>입력 파일 <span class="small">(.epub, .txt, TXT 또는 EPUB이 들어 있는 .zip)</span></label>
 <input id="epubFile" type="file" accept=".epub,.txt,.zip,application/epub+zip,text/plain,application/zip" multiple>
@@ -89,18 +93,19 @@ window.addEventListener("unhandledrejection",function(e){
 </div>
 <label>TXT 문자 인코딩</label>
 <select id="txtEncoding"><option value="auto">자동 감지</option><option value="utf-8">UTF-8</option><option value="euc-kr">EUC-KR / CP949</option></select>
-<div class="row" style="margin-top:10px"><button id="analyzeBtn">원본 분석</button><span id="fileInfo" class="small"></span></div>
+<div class="row" style="margin-top:10px"><button id="analyzeBtn">원본 분석</button><button type="button" class="light step-next" data-next="stepCover">다음: 표지</button><span id="fileInfo" class="small"></span></div>
 </section>
 
 
-<section class="card">
+<section id="stepCover" class="card app-step">
 <h2>2. 표지</h2><label class="section-toggle"><input id="enableCoverWork" type="checkbox" checked> 표지 작업 실행</label><div id="coverWorkBody">
 <label>대표 표지 <span class="small">(선택하지 않으면 원본 대표 표지를 유지)</span></label>
 <input id="mainCover" type="file" accept="image/*">
 <p class="small">권별 표지는 4단계에서 목차를 분석한 뒤, 각 권·외전·특별편마다 <b>원본 표지 / 새 이미지 / 표지 없음</b> 중 선택합니다.</p>
+<div class="row" style="margin-top:10px"><button type="button" class="light step-next" data-next="stepDescription">다음: 작품 설명</button></div>
 </div></section>
 
-<section class="card">
+<section id="stepDescription" class="card app-step">
 <h2>3. 작품 설명</h2><p class="small"><b>본문 자동 해석 없음:</b> 공·수·키워드 등을 소제목으로 나누지 않고 입력한 줄바꿈만 유지합니다.</p><label class="section-toggle"><input id="enableDescriptionWork" type="checkbox" checked> 작품 설명 작업 실행</label><div id="descriptionWorkBody">
 <label>작품 설명 맨 위 이미지 <span class="small">(선택 사항·여러 장 가능)</span></label>
 <input id="descImages" type="file" accept="image/*" multiple>
@@ -114,7 +119,7 @@ window.addEventListener("unhandledrejection",function(e){
 <label><input id="cleanDesc" type="checkbox" checked> 작품 목차·출간 정보·서점 안내·광고 구역 자동 제외</label>
 </div></section>
 
-<section class="card">
+<section id="stepToc" class="card app-step">
 <h2>4. 목차 붙여넣기</h2>
 <p class="small"><b>붙여넣은 목차가 최우선입니다.</b> 재구성을 누르면 이전 배정을 지우고 처음부터 다시 찾습니다.  원본에 내부 목차가 있어도 그 구역의 제목은 건너뛰고, 뒤에서 다시 나오는 실제 본문 제목을 화 시작점으로 사용합니다.</p>
 <div class="readability-box" style="margin-bottom:12px">
@@ -137,7 +142,7 @@ window.addEventListener("unhandledrejection",function(e){
   <label><input id="autoSortVolumes" type="checkbox" checked> 원본 계층 목차가 없을 때만 권 번호 기준 자동 정렬</label>
   <p class="small">우선순위: 원본 NAV/NCX → 붙여넣은 목차 → ZIP 내부 파일명 → 자동 추론</p>
 </div>
-<label class="section-toggle"><input id="enableTocWork" type="checkbox" checked> 목차·권 페이지 재구성 실행</label><div id="tocWorkBody">
+<label class="section-toggle"><input id="enableTocWork" type="checkbox" checked> 목차·권 페이지 재구성 사용</label><div id="tocWorkBody">
 <textarea id="tocText" placeholder="1권&#10;1화&#10;2화&#10;&#10;2권&#10;3화&#10;4화&#10;&#10;[권] 외전&#10;외전 1화"></textarea>
 <p class="small">
 상위 권을 직접 지정하려면 <code>[권] 1권</code>, <code>[권] 외전</code>처럼 입력하세요.
@@ -150,7 +155,7 @@ window.addEventListener("unhandledrejection",function(e){
 </div>
 
 <div class="row" style="margin-top:10px">
-<button id="applyTocBtn" disabled>붙여넣은 목차로 본문 재구성</button>
+<button id="applyTocBtn" disabled>붙여넣은 목차로 새 권·본문 재구성</button>
 <button id="autoOriginalBtn" class="light" disabled>원본 목차로 자동 구성</button>
 </div>
 <p class="small">원본 NAV/NCX가 있으면 그 순서를 그대로 유지합니다. 없으면 붙여넣은 목차 순서를 유지하고, 그마저 없을 때만 ZIP 내부 TXT 파일명을 권·외전으로 인식해 자동 정렬합니다. 목차 분석 후 권별 표지 선택창과 화별 원본 대응표가 나타납니다. 외전 1·외전 2는 현재 권의 하위 화이며, 별도 외전권은 <code>[권] 외전</code>으로 입력합니다.</p>
@@ -221,13 +226,13 @@ window.addEventListener("unhandledrejection",function(e){
 </div>
 </section>
 
-<section id="preflightCard" class="card">
-<h2>생성 전 검사</h2><p class="small">v4.0은 화면 편집 상태를 독립 프로젝트 데이터로 변환한 뒤 검사하고 생성합니다. 오류가 있으면 다운로드 대신 정확한 원인을 표시합니다.</p>
+<section id="preflightCard" class="card app-step">
+<h2>생성 전 검사</h2><p class="small">v7.1.0은 편집 화면과 생성 엔진이 동일한 프로젝트 구조를 사용합니다. 오류가 있으면 다운로드 대신 정확한 원인을 표시합니다.</p>
 <div id="preflightReport" class="status">원본과 목차를 분석하면 검사 결과가 표시됩니다.</div>
 </section>
 
 
-<section id="finalPreviewCard" class="card">
+<section id="stepReview" class="card app-step">
 <h2>4-3. 생성 전 최종 미리보기</h2>
 <p class="small">실제 EPUB spine과 NAV/NCX에 들어갈 권·화 순서를 표시합니다.</p>
 <div class="v5-grid">
@@ -272,7 +277,7 @@ window.addEventListener("unhandledrejection",function(e){
 </div></section>
 
 
-<section class="card">
+<section id="stepBuild" class="card app-step">
 <h2>6. 생성 옵션</h2>
 <p class="small">
 작품 설명 작업을 켜면 설명 페이지는 항상 표지 바로 다음에 배치됩니다.
@@ -317,7 +322,7 @@ XML·manifest·spine·내부 링크·ZIP 검사는 항상 실행되며, 실패�
 
 <section class="card">
 <h2>처리 상태</h2>
-<div id="status" class="status">v6.2.0 준비됨. 원본 파일을 선택하세요.</div>
+<div id="status" class="status">v7.2.1 준비됨. 원본 파일을 선택하세요.</div>
 <div id="result"></div>
 </section>
 
@@ -631,6 +636,75 @@ function findRequestedHeadingsInTxt(file,requestedLines){
  }
  return found;
 }
+
+function requestedTitleHasSplitSuffix(title){
+ return /(?:上|中|下|상|중|하|전편|후편|(?:part|파트)\s*[-_.:]?\s*\d+)\s*$/i.test(String(title||"").trim());
+}
+function titleMatchesRequestedPiece(sourceTitle,requestedTitle){
+ if(requestedTitleHasSplitSuffix(requestedTitle)){
+  return normalizeEmbeddedHeading(sourceTitle)===normalizeEmbeddedHeading(requestedTitle);
+ }
+ return matchingRequestedTitle(sourceTitle,requestedTitle);
+}
+function rebuildExplicitTocGloballyFromTxt(parsedGroups){
+ const files=availableTxtSources().slice().sort((a,b)=>compareVolumeInfo(a.volume||volumeInfoFromFilename(a.name),b.volume||volumeInfoFromFilename(b.name)));
+ const requestedTitles=parsedGroups.flatMap(g=>g.chapters.map(ch=>ch.title));
+ const occurrences=[];
+ for(const file of files){
+  const lines=normalizeTxt(file.text).split("\n");
+  const tocRange=detectInternalTocRange(lines);
+  const markers=[];
+  for(let i=0;i<lines.length;i++){
+   if(tocRange&&i>=tocRange.start&&i<tocRange.end)continue;
+   const raw=lines[i].trim();
+   if(!raw||raw.length>180)continue;
+   const req=requestedTitles.find(title=>titleMatchesRequestedPiece(raw,title));
+   if(!req)continue;
+   if(raw.length>Math.max(80,req.length+25))continue;
+   markers.push({lineIndex:i,title:raw,requestedTitle:req});
+  }
+  for(let i=0;i<markers.length;i++){
+   const cur=markers[i],next=markers[i+1];
+   occurrences.push({
+    file,
+    sourceVolume:(file.volume||volumeInfoFromFilename(file.name)).label,
+    lineIndex:cur.lineIndex,
+    title:cur.title,
+    requestedTitle:cur.requestedTitle,
+    content:lines.slice(cur.lineIndex+1,next?next.lineIndex:lines.length).join("\n").trim()
+   });
+  }
+ }
+ occurrences.sort((a,b)=>compareVolumeInfo(a.file.volume||volumeInfoFromFilename(a.file.name),b.file.volume||volumeInfoFromFilename(b.file.name))||a.lineIndex-b.lineIndex);
+ const candidates=[],groups=[],logs=[],unmatched=[];
+ const usedOccurrence=new Set();
+ let no=0;
+ for(const sourceGroup of parsedGroups){
+  const group={...sourceGroup,chapters:[],coverFile:sourceGroup.coverFile||null,coverMode:sourceGroup.coverMode||"none",originalCoverHref:sourceGroup.originalCoverHref||null};
+  for(const requestedChapter of sourceGroup.chapters){
+   const matches=occurrences.filter((o,idx)=>!usedOccurrence.has(idx)&&titleMatchesRequestedPiece(o.title,requestedChapter.title));
+   if(!matches.length){
+    group.chapters.push({...requestedChapter,sourceId:null});
+    unmatched.push(`${group.title} / ${requestedChapter.title}`);
+    logs.push(`미배정: ${group.title} / ${requestedChapter.title}`);
+    continue;
+   }
+   for(const match of matches){
+    const occurrenceIndex=occurrences.indexOf(match);usedOccurrence.add(occurrenceIndex);
+    no++;
+    const id=`explicit_txt_${String(no).padStart(5,"0")}`;
+    const candidate={id,href:`Text/chapter_${String(no).padStart(5,"0")}.xhtml`,media:"application/xhtml+xml",title:match.title,index:no-1,linear:"yes",content:match.content,sourceFile:match.file.name,sourceVolume:match.sourceVolume,sourceLine:match.lineIndex,sourceKind:"txt",detectedBy:"explicit-pasted-global"};
+    candidates.push(candidate);
+    group.chapters.push({title:match.title,sourceId:id,requestedTitle:requestedChapter.title});
+    logs.push(`${group.title} / ${requestedChapter.title} → ${match.sourceVolume} / ${match.title}`);
+   }
+  }
+  groups.push(group);
+ }
+ state.candidates=candidates;state.spine=candidates;state.groups=groups;state.manualGrouping=true;
+ return {groups,candidates,logs,unmatched,matched:candidates.length};
+}
+
 function rebuildFlatTocDirectlyFromTxt(requestedLines){
  const files=availableTxtSources()
   .slice()
@@ -1350,7 +1424,8 @@ async function analyzeEpubCollectionFiles(entries,outerName){
  $("bookTitle").value=title;$("bookCreator").value=creator;refreshDefaultOutputFilename(true);
  $("fileInfo").textContent=`${title} · EPUB ${units.length}권 · 본문 후보 ${candidates.length}개`;
  $("applyTocBtn").disabled=false;$("autoOriginalBtn").disabled=false;$("buildBtn").disabled=true;
- state.groups=units.map(unit=>({
+ state.groups=await collectionGroupsExpanded(units,candidates);
+ if(!state.groups.length)state.groups=units.map(unit=>({
   title:unit.volume.label||unit.title||`제${unit.index+1}권`,
   info:unit.volume,
   chapters:candidates.filter(c=>c.unitIndex===unit.index).map(c=>({title:c.title,sourceId:c.id})),
@@ -1551,6 +1626,78 @@ function groupsFromOriginalTree(tree){
  }
  return groups;
 }
+function unitNavHref(unit){for(const it of unit.manifest.values()){if((it.properties||"").split(/\s+/).includes("nav"))return it.href;}return null;}
+function unitNcxHref(unit){for(const it of unit.manifest.values()){if(it.media==="application/x-dtbncx+xml")return it.href;}return null;}
+async function unitInternalTree(unit){
+ try{
+  const navH=unitNavHref(unit);
+  if(navH){const full=join(unit.opfDir,navH);const t=await unit.zip.file(full)?.async("text");if(t){const tree=navTreeFromDocument(parseXML(t,"NAV"),full);if(tree.length)return tree;}}
+  const ncxH=unitNcxHref(unit);
+  if(ncxH){const full=join(unit.opfDir,ncxH);const t=await unit.zip.file(full)?.async("text");if(t){const tree=ncxTreeFromDocument(parseXML(t,"NCX"),full);if(tree.length)return tree;}}
+ }catch(e){console.warn("EPUB 내부 목차 분석 실패:",unit.name,e);}
+ return [];
+}
+function groupsFromUnitTree(unit,tree,unitCandidates){
+ const byPath=new Map();
+ for(const c of unitCandidates)byPath.set(normalizePath(join(unit.opfDir,c.originalHref||"")),c);
+ const used=new Set();let fb=0;
+ const resolve=(href,title)=>{
+  if(href){const c=byPath.get(normalizePath(href));if(c&&!used.has(c.id)){used.add(c.id);return c.id;}}
+  const rem=unitCandidates.filter(c=>!used.has(c.id));
+  const best=rem.map(c=>({c,s:improvedMatchScore(title,c)})).sort((a,b)=>b.s-a.s)[0];
+  if(best&&best.s>=0.6){used.add(best.c.id);return best.c.id;}
+  const f=unitCandidates[fb++];if(f&&!used.has(f.id)){used.add(f.id);return f.id;}
+  return null;
+ };
+ const defaultTitle=unit.volume.label||unit.title||`제${(unit.index??0)+1}권`;
+ const collectLeaves=(node,arr)=>{if(node.href)arr.push({title:node.title,href:node.href});if(node.children)for(const ch of node.children)collectLeaves(ch,arr);};
+ const groups=[];
+ for(const node of tree){
+  if(node.children&&node.children.length){
+   const g={title:node.title||defaultTitle,chapters:[],coverFile:null,coverMode:"none",originalCoverHref:null};
+   const leaves=[];for(const ch of node.children)collectLeaves(ch,leaves);
+   for(const lf of leaves){const id=resolve(lf.href,lf.title);if(id)g.chapters.push({title:lf.title,sourceId:id});}
+   if(g.chapters.length)groups.push(g);
+  }else{
+   if(!groups.length)groups.push({title:defaultTitle,chapters:[],coverFile:null,coverMode:"none",originalCoverHref:null});
+   const id=resolve(node.href,node.title);if(id)groups[groups.length-1].chapters.push({title:node.title,sourceId:id});
+  }
+ }
+ const leftover=unitCandidates.filter(c=>!used.has(c.id)).sort((a,b)=>(a.index??0)-(b.index??0));
+ if(leftover.length){
+  if(!groups.length)groups.push({title:defaultTitle,chapters:[],coverFile:null,coverMode:"none",originalCoverHref:null});
+  const g=groups[groups.length-1];
+  for(const c of leftover){used.add(c.id);g.chapters.push({title:c.title,sourceId:c.id});}
+ }
+ return groups.filter(g=>g.chapters.length);
+}
+async function collectionGroupsExpanded(units,candidates){
+ const out=[];const byId=new Map(candidates.map(c=>[c.id,c]));
+ for(const unit of units){
+  const unitCands=candidates.filter(c=>c.unitIndex===unit.index);
+  if(!unitCands.length)continue;
+  let tree=[];try{tree=await unitInternalTree(unit);}catch(e){tree=[];}
+  const ug=groupsFromUnitTree(unit,tree,unitCands);
+  for(const g of ug)for(const ch of g.chapters){const c=byId.get(ch.sourceId);if(c)c.sourceVolume=g.title;}
+  for(const g of ug)out.push(g);
+ }
+ return out;
+}
+function assignExplicitGroupsGloballyFromCandidates(groups){
+ const used=new Set();const logs=[],unmatched=[];const pool=state.candidates.slice();
+ const bestFor=(title)=>{let best=null,bs=-1;for(const c of pool){if(used.has(c.id))continue;const sc=improvedMatchScore(title,c);if(sc>bs){bs=sc;best=c;}}return{best,bs};};
+ const out=[];
+ for(const g of groups){
+  const og={...g,chapters:[],coverFile:g.coverFile||null,coverMode:g.coverMode||"none",originalCoverHref:g.originalCoverHref||null};
+  for(const ch of g.chapters){
+   const {best,bs}=bestFor(ch.title);
+   if(best&&bs>=0.6){used.add(best.id);og.chapters.push({title:ch.title,sourceId:best.id,requestedTitle:ch.title});logs.push(`${g.title} / ${ch.title} → ${best.sourceVolume||""} / ${best.title}`);}
+   else{og.chapters.push({title:ch.title,sourceId:null});unmatched.push(`${g.title} / ${ch.title}`);logs.push(`미배정: ${g.title} / ${ch.title}`);}
+  }
+  out.push(og);
+ }
+ return {groups:out,logs,unmatched};
+}
 async function extractOriginalHierarchicalGroups(){
  if(state.inputType!=="epub"||!state.zip)return [];
  try{
@@ -1580,7 +1727,8 @@ $("autoOriginalBtn").onclick=async()=>{
  try{
   state.manualGrouping=false;
   if(state.inputType==="epub_collection"){
-   state.groups=state.epubUnits.map(unit=>({
+   state.groups=await collectionGroupsExpanded(state.epubUnits,state.candidates);
+   if(!state.groups.length)state.groups=state.epubUnits.map(unit=>({
     title:unit.volume.label||unit.title||`제${unit.index+1}권`,
     info:unit.volume,
     chapters:state.candidates.filter(c=>c.unitIndex===unit.index).map(c=>({title:c.title,sourceId:c.id})),
@@ -1613,11 +1761,11 @@ $("autoOriginalBtn").onclick=async()=>{
       originalCoverHref:null
     }))
     .filter(g=>g.chapters.length);
-   state.groups=groups;
-   $("tocText").value=groups.map(g=>`${g.title}\n${g.chapters.map(c=>c.title).join("\n")}`).join("\n\n");
+   state.groups=zipGroups;
+   $("tocText").value=zipGroups.map(g=>`${g.title}\n${g.chapters.map(c=>c.title).join("\n")}`).join("\n\n");
    renderGroups();$("buildBtn").disabled=false;
-   const total=groups.reduce((n,g)=>n+g.chapters.length,0);
-   setStatus(`ZIP(TXT) 권별 목차 구성 완료\n권/구분: ${groups.length}개\n본문 후보: ${total}개\n순서: ${groups.map(g=>g.title).join(" → ")}`);
+   const total=zipGroups.reduce((n,g)=>n+g.chapters.length,0);
+   setStatus(`ZIP(TXT) 권별 목차 구성 완료\n권/구분: ${zipGroups.length}개\n본문 후보: ${total}개\n순서: ${zipGroups.map(g=>g.title).join(" → ")}`);
    return;
   }
 
@@ -1675,34 +1823,26 @@ ${result.logs.join("\n")}`);
 
   if(hasTxtSources()){
    for(const g of groups)for(const ch of g.chapters)ch.sourceId=null;
-   const result=rebuildTxtCandidatesFromPastedGroups(groups);
-   commitProjectGroups(maybeSortGroups(result.groups,"pasted"),"explicit-pasted-toc");$("buildBtn").disabled=false;
-   const unassignedRows=state.groups.flatMap(g=>g.chapters).filter(ch=>!ch.sourceId);
-   if(unassignedRows.length)$("buildBtn").disabled=true;
-   const st=mappingStats();
+   const result=rebuildExplicitTocGloballyFromTxt(groups);
+   commitProjectGroups(result.groups,"explicit-pasted-global");
+   $("buildBtn").disabled=result.unmatched.length>0;
    const assigned=state.groups.reduce((sum,g)=>sum+g.chapters.filter(ch=>ch.sourceId).length,0);
-   setStatus(`프로젝트 목차 반영 완료\n권/구분: ${state.groups.length}개\n목차 항목: ${n}개\n실제 배정: ${assigned}개\n찾지 못함: ${result.unmatched}개\n전체 본문 후보: ${state.candidates.length}개\n\n기존 배정을 초기화하고 TXT 전체를 다시 검색했습니다. 내부 목차의 제목은 건너뛰고 실제 본문 위치를 연결했습니다.`);
+   setStatus(`새 권 목차 재구성 완료
+사용자 지정 권/구분: ${state.groups.length}개
+입력 목차 항목: ${n}개
+실제 연결 조각: ${assigned}개
+찾지 못함: ${result.unmatched.length}개
+
+모든 TXT 원문을 전역 검색해 上·中·下 조각까지 사용자가 지정한 권 아래에 배치했습니다.
+
+${result.logs.join("\n")}`);
    return;
   }
 
-  let lastIndex=-1;
-  for(const g of groups)for(const ch of g.chapters){
-   let best=null,bestScore=-1;
-   const s=Math.max(0,lastIndex+1),e=Math.min(state.candidates.length,s+8);
-   for(let i=s;i<e;i++){
-    const sc=improvedMatchScore(ch.title,state.candidates[i]);
-    if(sc>bestScore){bestScore=sc;best=state.candidates[i]}
-   }
-   if(best&&bestScore>=0.55){ch.sourceId=best.id;lastIndex=best.index}
-   else{
-    const fallback=state.candidates[lastIndex+1]||null;
-    ch.sourceId=fallback?.id||null;
-    if(fallback)lastIndex=fallback.index;
-   }
-  }
-  commitProjectGroups(maybeSortGroups(groups,"pasted"),"epub-pasted-toc");$("buildBtn").disabled=false;
+  const gres=assignExplicitGroupsGloballyFromCandidates(groups);
+  commitProjectGroups(maybeSortGroups(gres.groups,"pasted"),"epub-pasted-global");$("buildBtn").disabled=gres.unmatched.length>0;
   const st=mappingStats();
-  setStatus(`목차 분석 완료\n적용 기준: 붙여넣은 목차 순서 유지\n권/구분: ${state.groups.length}개\n붙여넣은 화: ${n}개\n본문 후보: ${state.candidates.length}\n일치 ${st.ok} · 유사 ${st.similar} · 불일치 ${st.bad} · 미배정 ${st.unmatched} · 미사용 원본 ${st.unused}`);
+  setStatus(`목차 분석 완료(전역 검색)\n적용 기준: 붙여넣은 목차\n권/구분: ${state.groups.length}개\n붙여넣은 화: ${n}개\n본문 후보: ${state.candidates.length}\n일치 ${st.ok} · 유사 ${st.similar} · 불일치 ${st.bad} · 미배정 ${st.unmatched} · 미사용 원본 ${st.unused}\n\n${gres.logs.slice(0,300).join("\n")}`);
  }catch(e){setStatus("오류: "+e.message);console.error(e)}
 };
 
@@ -1946,7 +2086,7 @@ function makeGenerationReport(extra={}){
  const chapterCount=state.groups.reduce((n,g)=>n+g.chapters.length,0);
  const issues=analyzeProjectIssues();
  const lines=[
-  `EPUB Studio Mobile v7.0 생성 리포트`,
+  `EPUB Studio Mobile v7.2.1 생성 리포트`,
   `작품명: ${$("bookTitle").value.trim()}`,
   `작가명: ${$("bookCreator").value.trim()||"(없음)"}`,
   `권/구분: ${state.groups.length}개`,
@@ -3075,14 +3215,41 @@ $("searchChapterBtn").onclick=()=>{
  }else alert("일치하는 화를 찾지 못했습니다.");
 };
 $("chapterSearch").addEventListener("search",()=>$("searchChapterBtn").click());
+function scrollToAppStep(targetId,navButton=null){
+ const target=$(targetId);
+ if(!target){setStatus(`이동할 화면을 찾지 못했습니다: ${targetId}`);return false}
+ document.querySelectorAll(".mobile-toolbar button").forEach(btn=>btn.classList.toggle("active",btn===navButton));
+ target.classList.add("nav-focus");
+ const header=document.querySelector("header");
+ const offset=(header?.getBoundingClientRect().height||0)+12;
+ const top=Math.max(0,target.getBoundingClientRect().top+window.scrollY-offset);
+ try{window.scrollTo({top,behavior:"smooth"})}catch(e){window.scrollTo(0,top)}
+ setTimeout(()=>target.classList.remove("nav-focus"),1100);
+ return true;
+}
+function bindStepNextButtons(){
+ document.querySelectorAll(".step-next[data-next]").forEach(btn=>btn.addEventListener("click",()=>scrollToAppStep(btn.dataset.next,null)));
+}
+function bindStepNavigation(){
+ document.querySelectorAll(".mobile-toolbar [data-target]").forEach(btn=>{
+  btn.addEventListener("click",()=>scrollToAppStep(btn.dataset.target,btn));
+ });
+ const steps=[...document.querySelectorAll(".app-step")];
+ if("IntersectionObserver" in window){
+  const observer=new IntersectionObserver(entries=>{
+   const visible=entries.filter(x=>x.isIntersecting).sort((a,b)=>b.intersectionRatio-a.intersectionRatio)[0];
+   if(!visible)return;
+   document.querySelectorAll(".mobile-toolbar [data-target]").forEach(btn=>btn.classList.toggle("active",btn.dataset.target===visible.target.id));
+  },{rootMargin:"-20% 0px -55% 0px",threshold:[.05,.25,.5]});
+  steps.forEach(x=>observer.observe(x));
+ }
+}
 window.addEventListener("DOMContentLoaded",()=>{
- $("mobileAnalyzeBtn").onclick=()=>$("analyzeBtn").click();
- $("mobileAutoTocBtn").onclick=()=>$("autoOriginalBtn").click();
- $("mobilePreviewBtn").onclick=()=>{$("mobileEditorCard").classList.remove("hidden");$("mobileEditorCard").scrollIntoView({behavior:"smooth"})};
- $("mobileBuildBtn").onclick=()=>{const btn=$("buildBtn");if(btn.disabled){showBuildError(new Error("EPUB 생성 버튼이 아직 활성화되지 않았습니다. 원본 분석과 목차 구성을 먼저 완료하세요."));return}btn.click()};
+ bindStepNavigation();
+ bindStepNextButtons();
  $("closeBuildProgressBtn").onclick=()=>$("buildProgressOverlay").classList.add("hidden");
  $("buildProgressOverlay").addEventListener("click",e=>{if(e.target===$("buildProgressOverlay"))$("buildProgressOverlay").classList.add("hidden")});
- });
+});
 
 window.addEventListener("beforeunload",scheduleAutosave);
 setTimeout(()=>{
@@ -3127,10 +3294,12 @@ $("resetBtn").onclick=()=>location.reload();
     <button id="closeBuildProgressBtn" type="button" class="secondary hidden">닫기</button>
   </div>
 </div>
-<div class="mobile-toolbar">
-  <button id="mobileAnalyzeBtn" type="button" class="light">원본 분석</button>
-  <button id="mobileAutoTocBtn" type="button" class="light">목차 자동</button>
-  <button id="mobilePreviewBtn" type="button" class="light">미리보기</button>
-  <button id="mobileBuildBtn" type="button">EPUB 생성</button>
-</div>
+<nav class="mobile-toolbar" aria-label="단계 이동">
+  <button id="mobileOriginalNav" type="button" class="light" data-target="stepOriginal">1. 원본</button>
+  <button id="mobileCoverNav" type="button" class="light" data-target="stepCover">2. 표지</button>
+  <button id="mobileDescriptionNav" type="button" class="light" data-target="stepDescription">3. 설명</button>
+  <button id="mobileTocNav" type="button" class="light" data-target="stepToc">4. 목차</button>
+  <button id="mobileReviewNav" type="button" class="light" data-target="stepReview">5. 검토</button>
+  <button id="mobileBuildNav" type="button" class="light" data-target="stepBuild">6. 생성</button>
+</nav>
 </body></html>
