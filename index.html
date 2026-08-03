@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>EPUB Studio Mobile v2.2</title>
+<title>EPUB Studio Mobile v2.3</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -36,7 +36,7 @@ window.addEventListener("unhandledrejection",function(e){
 </script>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v2.2</h1><div class="sub">CSS 보존 우선 · 필요한 기능만 선택 실행</div></header>
+<header><h1>EPUB Studio Mobile v2.3</h1><div class="sub">CSS 보존 우선 · 필요한 기능만 선택 실행</div></header>
 <main>
 
 <div id="buildMode">
@@ -82,7 +82,7 @@ window.addEventListener("unhandledrejection",function(e){
 <button id="applyTocBtn" disabled>목차 분석·본문 배정</button>
 <button id="autoOriginalBtn" class="light" disabled>원본 목차로 자동 구성</button>
 </div>
-<p class="small">목차 분석 후 아래에 권별 표지 선택창과 화별 원본 대응표가 나타납니다. 외전 1·외전 2는 현재 권의 하위 화이며, 별도 외전권은 <code>[권] 외전</code>으로 입력합니다.</p>
+<p class="small">ZIP(TXT)은 내부 TXT 파일명을 권·외전으로 인식해 권→화 구조로 구성합니다. 목차 분석 후 권별 표지 선택창과 화별 원본 대응표가 나타납니다. 외전 1·외전 2는 현재 권의 하위 화이며, 별도 외전권은 <code>[권] 외전</code>으로 입력합니다.</p>
 </div></section>
 
 <section id="mappingCard" class="card hidden">
@@ -202,11 +202,38 @@ function firstDesc(el,name){return descendants(el,name)[0]||null}
 function stripKnownExtension(name){
  return String(name||"").replace(/\.(epub|txt|zip)$/i,"").trim();
 }
+function cleanBookTitleFromFilename(title){
+ return String(title||"")
+  .replace(/\s*(?:\(|\[)\s*(?:완결|완|갠소|개인소장|합본|연재본)\s*(?:\)|\])\s*/gi," ")
+  .replace(/\s+(?:제?\s*)?\d+\s*권\s*$/i,"")
+  .replace(/\s*\(\s*외전(?:\s*\d+)?\s*\)\s*$/i,"")
+  .replace(/\s+외전(?:\s*\d+)?\s*$/i,"")
+  .replace(/\s+/g," ").trim();
+}
 function parseAuthorTitleFromFilename(name){
  const base=stripKnownExtension(name);
  const m=base.match(/^\s*\[([^\]]+)\]\s*(.+?)\s*$/);
- if(m)return {author:m[1].trim(),title:m[2].trim()};
- return {author:"",title:base};
+ if(m)return {author:m[1].trim(),title:cleanBookTitleFromFilename(m[2])};
+ return {author:"",title:cleanBookTitleFromFilename(base)};
+}
+function volumeInfoFromFilename(name){
+ const base=stripKnownExtension(name).normalize("NFC");
+ const num=base.match(/(?:^|\s)(\d+)\s*권(?:\s|$|\()/i);
+ if(num)return {label:`${Number(num[1])}권`,kind:0,number:Number(num[1])};
+ const ext=base.match(/외전\s*(\d+)?/i);
+ if(ext){
+   const n=ext[1]?Number(ext[1]):1;
+   return {label:n<=1?"외전":`외전 ${n}`,kind:1,number:n};
+ }
+ const special=base.match(/(?:특별편|special)\s*(\d+)?/i);
+ if(special){
+   const n=special[1]?Number(special[1]):1;
+   return {label:n<=1?"특별편":`특별편 ${n}`,kind:2,number:n};
+ }
+ return {label:cleanBookTitleFromFilename(base)||"본문",kind:3,number:9999};
+}
+function compareVolumeInfo(a,b){
+ return a.kind-b.kind || a.number-b.number || a.label.localeCompare(b.label,"ko",{numeric:true});
 }
 
 function esc(s){return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;")}
@@ -406,34 +433,38 @@ function txtBodyHtml(text){
 async function analyzeTxtInput(f){
  const ext=(f.name.split(".").pop()||"").toLowerCase(),files=[];
  if(ext==="txt"){
-  files.push({name:f.name,text:decodeText(await f.arrayBuffer(),$("txtEncoding").value)});
+  files.push({name:f.name,text:decodeText(await f.arrayBuffer(),$("txtEncoding").value),volume:volumeInfoFromFilename(f.name)});
  }else{
   const z=await JSZip.loadAsync(await f.arrayBuffer(),{checkCRC32:true});
   const names=Object.keys(z.files).filter(n=>!z.files[n].dir&&/\.txt$/i.test(n)).sort((a,b)=>a.localeCompare(b,"ko",{numeric:true}));
   if(!names.length)throw new Error("ZIP 안에 TXT 파일이 없습니다. EPUB이 들어 있는 ZIP 합본은 아직 지원하지 않습니다.");
-  for(const name of names)files.push({name,text:decodeText(await z.file(name).async("uint8array"),$("txtEncoding").value)});
+  for(const name of names)files.push({name,text:decodeText(await z.file(name).async("uint8array"),$("txtEncoding").value),volume:volumeInfoFromFilename(name)});
  }
+ files.sort((a,b)=>compareVolumeInfo(a.volume||volumeInfoFromFilename(a.name),b.volume||volumeInfoFromFilename(b.name)));
  const candidates=[];let n=0;
  for(const file of files){
   for(const part of splitTxtChapters(file.text,file.name)){
-   n++;candidates.push({id:"txt_"+String(n).padStart(5,"0"),href:"Text/chapter_"+String(n).padStart(5,"0")+".xhtml",media:"application/xhtml+xml",title:part.title,index:n-1,linear:"yes",content:part.content,sourceFile:file.name});
+   n++;candidates.push({id:"txt_"+String(n).padStart(5,"0"),href:"Text/chapter_"+String(n).padStart(5,"0")+".xhtml",media:"application/xhtml+xml",title:part.title,index:n-1,linear:"yes",content:part.content,sourceFile:file.name,sourceVolume:(file.volume||volumeInfoFromFilename(file.name)).label});
   }
  }
- const title=$("bookTitle").value.trim()||f.name.replace(/\.(txt|zip)$/i,"");
+ const title=$("bookTitle").value.trim()||parseAuthorTitleFromFilename(f.name).title||f.name.replace(/\.(txt|zip)$/i,"");
  const creator=$("bookCreator").value.trim();
  state={inputType:"txt",zip:null,originalBytes:null,opfPath:"OEBPS/content.opf",opfDir:"OEBPS/",opfDoc:null,manifest:new Map(),spine:candidates,candidates,groups:[],title,creator,navHref:"nav.xhtml",ncxHref:"toc.ncx",txtFiles:files};
- $("bookTitle").value=title;$("bookCreator").value=creator;
+ if(!$("bookTitle").value.trim())$("bookTitle").value=title;if(!$("bookCreator").value.trim())$("bookCreator").value=creator;
  $("fileInfo").textContent=`${title} · TXT ${files.length}개 · 본문 후보 ${candidates.length}개`;
  $("applyTocBtn").disabled=false;$("autoOriginalBtn").disabled=false;$("buildBtn").disabled=true;
- setStatus(`TXT 분석 완료\n작품명: ${title}\n작가: ${creator||"(직접 입력 가능)"}\nTXT 파일: ${files.length}\n본문 후보: ${candidates.length}\n\n화 구분을 잘못 인식한 경우 목차 배정표에서 원본 항목을 직접 선택하세요.`);
+ setStatus(`TXT 분석 완료\n작품명: ${title}\n작가: ${creator||"(직접 입력 가능)"}\nTXT 파일: ${files.length}\n본문 후보: ${candidates.length}\n권/구분 후보: ${files.map(x=>(x.volume||volumeInfoFromFilename(x.name)).label).join(" → ")}\n\n'원본 목차로 자동 구성'을 누르면 TXT 파일별로 권→화 구조를 만듭니다.`);
 }
 
 $("analyzeBtn").onclick=async()=>{
  $("fileInfo").textContent="분석 중...";setStatus("원본 파일 분석을 시작합니다...");
  try{
   const f=$("epubFile").files[0]; if(!f)throw new Error("원본 파일을 선택하세요.");
+  const filenameMeta=parseAuthorTitleFromFilename(f.name);
+  if(filenameMeta.author)$("bookCreator").value=filenameMeta.author;
+  if(filenameMeta.title)$("bookTitle").value=filenameMeta.title;
   const ext=(f.name.split(".").pop()||"").toLowerCase();
-  setStatus("원본 파일 읽는 중...");
+  setStatus(`원본 파일 읽는 중...\n파일명 인식: 작가 ${filenameMeta.author||"(없음)"} / 작품 ${filenameMeta.title||"(없음)"}`);
   if(ext==="txt"||ext==="zip"){await analyzeTxtInput(f);return}
   if(ext!=="epub")throw new Error("지원 형식은 EPUB, TXT, ZIP(TXT)입니다.");
   const bytes=await f.arrayBuffer(); const zip=await JSZip.loadAsync(bytes,{checkCRC32:true});
@@ -456,7 +487,7 @@ $("analyzeBtn").onclick=async()=>{
   const metadata=firstDesc(opf,"metadata"); const titleEl=metadata&&descendants(metadata,"title")[0],creatorEl=metadata&&descendants(metadata,"creator")[0];
   const title=titleEl?.textContent?.trim()||f.name.replace(/\.epub$/i,""),creator=creatorEl?.textContent?.trim()||"";
   state={inputType:"epub",zip,originalBytes:bytes,opfPath,opfDir,opfDoc:opf,manifest,spine,candidates,groups:[],title,creator,navHref:null,ncxHref:null,txtFiles:[],coverCandidates:[],sourceCoverByGroup:new Map()};
-  $("bookTitle").value=title;$("bookCreator").value=creator;
+  if(!$("bookTitle").value.trim())$("bookTitle").value=title;if(!$("bookCreator").value.trim())$("bookCreator").value=creator;
   for(const it of manifest.values()){if((it.properties||"").split(/\s+/).includes("nav"))state.navHref=it.href;if(it.media==="application/x-dtbncx+xml")state.ncxHref=it.href}
   $("fileInfo").textContent=`${state.title} · spine ${spine.length}개 · 본문 후보 ${candidates.length}개`;
   $("applyTocBtn").disabled=false;$("autoOriginalBtn").disabled=false;$("buildBtn").disabled=true;
@@ -554,6 +585,35 @@ async function extractOriginalHierarchicalGroups(){
 
 $("autoOriginalBtn").onclick=async()=>{
  try{
+  // ZIP(TXT) 또는 여러 TXT는 파일 하나를 상위 권으로 사용한다.
+  if(state.inputType==="txt"&&state.txtFiles.length>1){
+   const byFile=new Map();
+   for(const file of state.txtFiles){
+    const info=file.volume||volumeInfoFromFilename(file.name);
+    byFile.set(file.name,{title:info.label,info,chapters:[]});
+   }
+   for(const c of state.candidates){
+    const entry=byFile.get(c.sourceFile);
+    if(entry)entry.chapters.push({title:c.title,sourceId:c.id});
+   }
+   const groups=[...byFile.values()]
+    .sort((a,b)=>compareVolumeInfo(a.info,b.info))
+    .map(x=>({
+      title:x.title,
+      chapters:x.chapters,
+      coverFile:null,
+      coverMode:"none",
+      originalCoverHref:null
+    }))
+    .filter(g=>g.chapters.length);
+   state.groups=groups;
+   $("tocText").value=groups.map(g=>`${g.title}\n${g.chapters.map(c=>c.title).join("\n")}`).join("\n\n");
+   renderGroups();$("buildBtn").disabled=false;
+   const total=groups.reduce((n,g)=>n+g.chapters.length,0);
+   setStatus(`ZIP(TXT) 권별 목차 구성 완료\n권/구분: ${groups.length}개\n본문 후보: ${total}개\n순서: ${groups.map(g=>g.title).join(" → ")}`);
+   return;
+  }
+
   const hierarchical=await extractOriginalHierarchicalGroups();
   if(hierarchical.length){
    state.groups=hierarchical;
@@ -563,10 +623,16 @@ $("autoOriginalBtn").onclick=async()=>{
    setStatus(`원본 계층 목차 구성 완료\n권/구분: ${hierarchical.length}개\n화: ${total}개`);
    return;
   }
-  const lines=state.candidates.map(c=>c.title);
-  $("tocText").value=`본문\n${lines.join("\n")}`;
-  $("applyTocBtn").click();
-  setStatus(`원본에 계층형 권 목차가 없어 화 목록으로 구성했습니다.\n본문 후보: ${lines.length}개`);
+
+  // 단일 TXT 또는 계층이 없는 EPUB: 가짜 '본문' 줄을 목차 항목으로 넣지 않고 직접 그룹 구성.
+  state.groups=[{
+    title:"본문",
+    chapters:state.candidates.map(c=>({title:c.title,sourceId:c.id})),
+    coverFile:null,coverMode:"none",originalCoverHref:null
+  }];
+  $("tocText").value=state.candidates.map(c=>c.title).join("\n");
+  renderGroups();$("buildBtn").disabled=false;
+  setStatus(`원본 후보로 자동 구성 완료\n구분: 1개\n본문 후보: ${state.candidates.length}개`);
  }catch(e){setStatus("오류: "+e.message);console.error(e)}
 };
 
