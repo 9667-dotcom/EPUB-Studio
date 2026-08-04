@@ -657,6 +657,31 @@ function matchingRequestedTitle(sourceTitle,requestedTitle){
  const a=key(sourceTitle),b=key(requestedTitle);
  return Boolean(a&&b&&a===b);
 }
+// 파일 텍스트 안에서 '권' 구분 줄(합본에서 1권 / 2권 / [3권] / 제4권 / 외전 권 등)을 찾는다.
+// 표지/판권의 '해의 흔적 1권' 같은 제목 줄은 앞에 글자가 있어 걸리지 않는다(오탐 방지).
+function findVolumeMarkersInText(lines){
+ const marks=[];
+ for(let i=0;i<lines.length;i++){
+  const s=String(lines[i]||"").trim();
+  if(!s||s.length>40)continue;
+  if(/^\[.+\]$/.test(s)&&/(권|외전|특별편|번외)/.test(s)){marks.push({lineIndex:i,label:s.replace(/^\[(.+)\]$/,"$1").trim()});continue;}
+  if(/^(?:제\s*)?\d+\s*권(?:\s*\(.+\))?$/.test(s)){marks.push({lineIndex:i,label:s});continue;}
+  if(/^(?:외전|특별편|번외편?)\s*\d*\s*권$/.test(s)){marks.push({lineIndex:i,label:s});continue;}
+ }
+ return marks;
+}
+// 파일을 내부 '권' 구분에 따라 섹션으로 나눈다. 내부 구분이 없으면 파일 전체가 1개 섹션(파일 라벨).
+function volumeSectionsOfFile(file,lines){
+ const fileLabel=(file.volume||volumeInfoFromFilename(file.name)).label;
+ const marks=findVolumeMarkersInText(lines);
+ if(!marks.length)return [{label:fileLabel,start:0,end:lines.length}];
+ const secs=[];
+ if(marks[0].lineIndex>0)secs.push({label:fileLabel,start:0,end:marks[0].lineIndex});
+ for(let i=0;i<marks.length;i++){
+  secs.push({label:marks[i].label,start:marks[i].lineIndex+1,end:i+1<marks.length?marks[i+1].lineIndex:lines.length});
+ }
+ return secs;
+}
 function findRequestedHeadingsInTxt(file,requestedLines){
  const lines=normalizeTxt(file.text).split("\n");
  const tocRange=detectInternalTocRange(lines);
@@ -690,26 +715,33 @@ function rebuildExplicitTocGloballyFromTxt(parsedGroups){
  for(const file of files){
   const lines=normalizeTxt(file.text).split("\n");
   const tocRange=detectInternalTocRange(lines);
-  const markers=[];
-  for(let i=0;i<lines.length;i++){
-   if(tocRange&&i>=tocRange.start&&i<tocRange.end)continue;
-   const raw=lines[i].trim();
-   if(!raw||raw.length>180)continue;
-   const req=requestedTitles.find(title=>titleMatchesRequestedPiece(raw,title));
-   if(!req)continue;
-   if(raw.length>Math.max(80,req.length+25))continue;
-   markers.push({lineIndex:i,title:raw,requestedTitle:req});
-  }
-  for(let i=0;i<markers.length;i++){
-   const cur=markers[i],next=markers[i+1];
-   occurrences.push({
-    file,
-    sourceVolume:(file.volume||volumeInfoFromFilename(file.name)).label,
-    lineIndex:cur.lineIndex,
-    title:cur.title,
-    requestedTitle:cur.requestedTitle,
-    content:lines.slice(cur.lineIndex+1,next?next.lineIndex:lines.length).join("\n").trim()
-   });
+  const sections=volumeSectionsOfFile(file,lines);
+  for(const sec of sections){
+   const markers=[];
+   for(let i=sec.start;i<sec.end;i++){
+    if(tocRange&&i>=tocRange.start&&i<tocRange.end)continue;
+    const raw=lines[i].trim();
+    if(!raw||raw.length>180)continue;
+    const req=requestedTitles.find(title=>titleMatchesRequestedPiece(raw,title));
+    if(!req)continue;
+    if(raw.length>Math.max(80,req.length+25))continue;
+    markers.push({lineIndex:i,title:raw,requestedTitle:req});
+   }
+   // 같은 권 섹션 안에서 같은 제목이 다시 나오면 첫 번째만 남기고 그 사이 본문은 앞 화에 흡수.
+   // 다른 권 섹션의 같은 제목(합본에서 권마다 반복되는 화 번호)은 각각 별도로 남는다.
+   const seen=new Set(),kept=[];
+   for(const m of markers){const key=baseChapterTitle(m.title)+"|"+splitSuffixRank(m.title);if(seen.has(key))continue;seen.add(key);kept.push(m);}
+   for(let i=0;i<kept.length;i++){
+    const cur=kept[i],next=kept[i+1];
+    occurrences.push({
+     file,
+     sourceVolume:sec.label,
+     lineIndex:cur.lineIndex,
+     title:cur.title,
+     requestedTitle:cur.requestedTitle,
+     content:lines.slice(cur.lineIndex+1,next?next.lineIndex:sec.end).join("\n").trim()
+    });
+   }
   }
  }
  occurrences.sort((a,b)=>compareVolumeInfo(a.file.volume||volumeInfoFromFilename(a.file.name),b.file.volume||volumeInfoFromFilename(b.file.name))||a.lineIndex-b.lineIndex);
@@ -766,51 +798,61 @@ function rebuildFlatTocDirectlyFromTxt(requestedLines){
  let candidateNo=0;
 
  for(const file of files){
-  const markers=findRequestedHeadingsInTxt(file,requestedLines);
-  if(!markers.length)continue;
   const textLines=normalizeTxt(file.text).split("\n");
-  const group={
-   title:(file.volume||volumeInfoFromFilename(file.name)).label,
-   info:file.volume||volumeInfoFromFilename(file.name),
-   chapters:[],coverFile:null,coverMode:"none",originalCoverHref:null
-  };
-  // 각 마커의 본문을 먼저 계산한 뒤, 같은 제목·같은 조각(上/中/下 순위)이 한 파일 안에서
-  // 중복 감지되면(내부 목차 재수록 등) 본문이 가장 긴 하나만 남긴다.
-  const withContent=markers.map((cur,i)=>{
-   const next=markers[i+1];
-   return {...cur,content:textLines.slice(cur.lineIndex+1,next?next.lineIndex:textLines.length).join("\n").trim()};
-  });
-  const bestByPiece=new Map();
-  for(const m of withContent){
-   const k=baseChapterTitle(m.title)+"|"+splitSuffixRank(m.title);
-   const prev=bestByPiece.get(k);
-   if(!prev||(m.content||"").length>(prev.content||"").length)bestByPiece.set(k,m);
-  }
-  const finalMarkers=[...bestByPiece.values()].sort((a,b)=>a.lineIndex-b.lineIndex);
-  for(const cur of finalMarkers){
-   const content=cur.content;
-   candidateNo++;
-   const id=`flat_txt_${String(candidateNo).padStart(5,"0")}`;
-   const candidate={
-    id,
-    href:`Text/chapter_${String(candidateNo).padStart(5,"0")}.xhtml`,
-    media:"application/xhtml+xml",
-    title:cur.title,
-    index:candidateNo-1,
-    linear:"yes",
-    content,
-    sourceFile:file.name,
-    sourceVolume:group.title,
-    sourceLine:cur.lineIndex,
-    sourceKind:"txt",
-    detectedBy:"flat-pasted-toc"
+  const tocRange=detectInternalTocRange(textLines);
+  const sections=volumeSectionsOfFile(file,textLines);
+  for(const sec of sections){
+   // 이 권 섹션 안에서 요청된 제목이 나타나는 줄(마커)만 수집. 내부 목차 구간은 건너뛴다.
+   const secMarkers=[];
+   for(let i=sec.start;i<sec.end;i++){
+    if(tocRange&&i>=tocRange.start&&i<tocRange.end)continue;
+    const raw=textLines[i].trim();
+    if(!raw||raw.length>180)continue;
+    const req=requestedLines.find(title=>matchingRequestedTitle(raw,title));
+    if(!req)continue;
+    if(raw.length>Math.max(80,req.length+20))continue;
+    secMarkers.push({lineIndex:i,title:raw,requestedTitle:req});
+   }
+   if(!secMarkers.length)continue;
+   // 같은 권 섹션 안에서 같은 제목이 다시 나오면(본문 중간 제목 반복 등) 첫 번째만 남기고
+   // 그 사이 본문은 앞 화에 흡수한다. 다른 권 섹션의 같은 제목은 각각 살아남는다.
+   const seen=new Set(),kept=[];
+   for(const m of secMarkers){
+    const key=baseChapterTitle(m.title)+"|"+splitSuffixRank(m.title);
+    if(seen.has(key))continue;
+    seen.add(key);kept.push(m);
+   }
+   const group={
+    title:sec.label,
+    info:volumeInfoFromFilename(sec.label)||(file.volume||volumeInfoFromFilename(file.name)),
+    chapters:[],coverFile:null,coverMode:"none",originalCoverHref:null
    };
-   candidates.push(candidate);
-   group.chapters.push({title:cur.title,sourceId:id,requestedTitle:cur.requestedTitle});
-   matchedRequested.add(cur.requestedTitle);
-   logs.push(`${cur.requestedTitle} → ${group.title} / ${cur.title}`);
+   for(let k=0;k<kept.length;k++){
+    const cur=kept[k],next=kept[k+1];
+    const content=textLines.slice(cur.lineIndex+1,next?next.lineIndex:sec.end).join("\n").trim();
+    candidateNo++;
+    const id=`flat_txt_${String(candidateNo).padStart(5,"0")}`;
+    const candidate={
+     id,
+     href:`Text/chapter_${String(candidateNo).padStart(5,"0")}.xhtml`,
+     media:"application/xhtml+xml",
+     title:cur.title,
+     index:candidateNo-1,
+     linear:"yes",
+     content,
+     sourceFile:file.name,
+     sourceVolume:sec.label,
+     sourceLine:cur.lineIndex,
+     sourceKind:"txt",
+     detectedBy:"flat-pasted-toc"
+    };
+    candidates.push(candidate);
+    group.chapters.push({title:cur.title,sourceId:id,requestedTitle:cur.requestedTitle});
+    matchedRequested.add(cur.requestedTitle);
+    logs.push(`${cur.requestedTitle} → ${group.title} / ${cur.title}`);
+   }
+   if(group.chapters.length)groups.push(group);
   }
-  groups.push(group);
  }
 
  const unmatched=requestedLines.filter(title=>!matchedRequested.has(title));
@@ -2383,7 +2425,7 @@ function renderMobileTree(){
    row.querySelector('[data-role="mobileTitle"]').oninput=e=>{
     ch.title=e.target.value;
     row.dataset.title=ch.title.toLowerCase();
-    updateStructurePreview();updatePreflight();scheduleAutosave();
+    scheduleAutosave();
    };
    row.querySelector('[data-role="mobileTitle"]').onblur=()=>renderGroups();
    row.querySelector('[data-role="preview"]').onclick=()=>previewChapter(ch);
@@ -2803,15 +2845,15 @@ function renderGroups(){
    ).join("");
    const ml=matchLabel(ch);const groupOpts=state.groups.map((x,i)=>`<option value="${i}" ${i===gi?"selected":""}>${esc(x.title)}</option>`).join("");
    tr.innerHTML=`<td><span class="drag-handle">☰</span><button type="button" class="light" data-role="cup">↑</button><button type="button" class="light" data-role="cdown">↓</button></td>
-   <td>${ci+1}</td><td><input type="text" value="${esc(ch.title)}"></td><td><span class="${ml.cls}">${ml.label}${ml.score?` ${Math.round(ml.score*100)}%`:""}</span></td><td><select class="chapter-select">${opts}</select></td>
+   <td>${ci+1}</td><td><input type="text" value="${esc(ch.title)}"><span data-role="titleSaved" class="small" style="color:#178a3a;margin-left:6px"></span></td><td><span class="${ml.cls}">${ml.label}${ml.score?` ${Math.round(ml.score*100)}%`:""}</span></td><td><select class="chapter-select">${opts}</select></td>
    <td>${chapterHasVisibleBody(ch)?"있음":"<span class='empty-chapter-warning'>비어 있음</span>"}</td>
    <td><select data-role="moveGroup">${groupOpts}</select><button type="button" class="light" data-role="moveGroupBtn">이동</button></td>
    <td><button type="button" class="remove-chapter-btn" data-role="removeChapter">목차에서 제외</button></td>`;
    tr.querySelector("input").oninput=e=>{
     ch.title=e.target.value;
     const status=tr.querySelector("[data-role='titleSaved']");
-    if(status)status.textContent="저장됨";
-    updateStructurePreview();renderMobileTree();updatePreflight();renderV6Preview();scheduleAutosave();
+    if(status)status.textContent="✓ 반영됨";
+    scheduleAutosave();
    };
    tr.querySelector("input").onblur=()=>renderGroups();
    tr.querySelector("select").onchange=e=>{ch.sourceId=e.target.value||null;renderGroups()};
