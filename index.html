@@ -774,9 +774,21 @@ function rebuildFlatTocDirectlyFromTxt(requestedLines){
    info:file.volume||volumeInfoFromFilename(file.name),
    chapters:[],coverFile:null,coverMode:"none",originalCoverHref:null
   };
-  for(let i=0;i<markers.length;i++){
-   const cur=markers[i],next=markers[i+1];
-   const content=textLines.slice(cur.lineIndex+1,next?next.lineIndex:textLines.length).join("\n").trim();
+  // 각 마커의 본문을 먼저 계산한 뒤, 같은 제목·같은 조각(上/中/下 순위)이 한 파일 안에서
+  // 중복 감지되면(내부 목차 재수록 등) 본문이 가장 긴 하나만 남긴다.
+  const withContent=markers.map((cur,i)=>{
+   const next=markers[i+1];
+   return {...cur,content:textLines.slice(cur.lineIndex+1,next?next.lineIndex:textLines.length).join("\n").trim()};
+  });
+  const bestByPiece=new Map();
+  for(const m of withContent){
+   const k=baseChapterTitle(m.title)+"|"+splitSuffixRank(m.title);
+   const prev=bestByPiece.get(k);
+   if(!prev||(m.content||"").length>(prev.content||"").length)bestByPiece.set(k,m);
+  }
+  const finalMarkers=[...bestByPiece.values()].sort((a,b)=>a.lineIndex-b.lineIndex);
+  for(const cur of finalMarkers){
+   const content=cur.content;
    candidateNo++;
    const id=`flat_txt_${String(candidateNo).padStart(5,"0")}`;
    const candidate={
@@ -2116,9 +2128,10 @@ ${res.logs.slice(0,300).join("\n")}`);
    return;
   }
 
-  if(!hasExplicitGroup&&state.groups.length){
-   // 장 제목만 붙여넣은 경우 TXT 원문을 직접 다시 검색한다.
-   // 기존 자동 후보가 권 전체 1개뿐이어도 각 장과 上·中·下 조각을 새 후보로 만든다.
+  if(!hasExplicitGroup&&(hasTxtSources()||state.groups.length)){
+   // 권 표시가 없는 평탄한 목차(1,2,3,4,5,6…)를 붙여넣은 경우:
+   // TXT는 각 화가 실제로 들어 있는 원본 파일(=권) 아래로 자동 분배하고,
+   // EPUB은 기존 권 구조에 맞춰 펼친다.
    const result=hasTxtSources()
     ?rebuildFlatTocDirectlyFromTxt(lines)
     :expandFlatTocIntoOriginalVolumes(lines);
