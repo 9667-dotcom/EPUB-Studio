@@ -163,11 +163,12 @@ window.addEventListener("unhandledrejection",function(e){
 
 <section id="candidateReviewCard" class="card hidden">
 <h2>4-0. 감지된 화 후보 확인</h2>
-<p class="small">여기서 체크를 해제하면 TXT 분할 후보에서 제외됩니다. 이미 목차에 들어간 잘못된 프롤로그 같은 항목은 4-1 목차 편집의 ‘목차에서 제외’를 사용하세요.</p>
-<p class="small">외전·특별편 TXT도 파일 내부의 #번호, 번호화, 제번호화 등을 화 후보로 인식합니다.</p>
+<p class="small">여기서 체크를 해제하면 해당 페이지/후보가 <b>실제로 본문 후보에서 빠지고</b> 합본에도 들어가지 않습니다. 반대로 잘못 빠진 화는 다시 체크해 되살릴 수 있습니다.</p>
+<p class="small"><b>EPUB 여러 개 합칠 때:</b> 각 EPUB의 원본 목차(nav/ncx)와 페이지 구조로 표지·목차·판권을 자동으로 골라 화에서 제외합니다. 아래 목록에서 표지/목차/부가로 표시된 항목은 기본 해제되어 있으며, 필요하면 직접 켜고 끌 수 있습니다.</p>
 <div class="row">
   <button id="selectAllCandidatesBtn" type="button" class="light">전체 사용</button>
   <button id="deselectAllCandidatesBtn" type="button" class="light">전체 제외</button>
+  <button id="resetCandidatesAutoBtn" type="button" class="light">자동 판정으로 되돌리기</button>
 </div>
 <p class="small">체크를 해제하면 해당 권의 목차와 새 화 시작점에서만 제외됩니다. 원문은 삭제되지 않고 이전 유효 화에 포함되며, 권 구분은 유지됩니다.</p>
 <div id="candidateReviewArea"></div>
@@ -1345,8 +1346,33 @@ function rebuildTxtCandidatesFromSelections(){
  const order=state.groups.map(g=>g.title).join(" → ");
  setStatus(`TXT 화 후보 재구성 완료\n권/구분: ${state.groups.length}개\n사용 중인 화 후보: ${candidates.length}개\n순서: ${order}\n체크 해제한 표시는 원문에 남고 새 화 시작점으로 사용하지 않습니다.`);
 }
+const SECTION_KIND_LABEL={chapter:"화(본문)",cover:"표지",toc:"목차",front:"부가",duplicate:"중복"};
 function renderCandidateReview(){
  const card=$("candidateReviewCard"),area=$("candidateReviewArea");
+ // 합본(EPUB 여러 개): 각 EPUB의 페이지를 화/표지/목차/부가로 분류해 켜고 끌 수 있게 한다.
+ if(state.inputType==="epub_collection"&&state.epubUnits?.length){
+  card.classList.remove("hidden");area.innerHTML="";
+  for(const unit of state.epubUnits){
+   if(!unit.sections?.length)continue;
+   const h=document.createElement("div");h.className="small";h.style.cssText="font-weight:800;margin:10px 0 4px";
+   h.textContent=`${unit.volume.label||unit.name} — 페이지 ${unit.sections.length}개`;
+   area.appendChild(h);
+   for(const s of unit.sections){
+    const key=`${unit.index}::${s.href}`;
+    const enabled=state.epubSectionSelections.get(key)!==false;
+    const row=document.createElement("div");row.className="candidate-row";
+    const kindText=SECTION_KIND_LABEL[s.kind]||s.kind;
+    row.innerHTML=`<label><input type="checkbox" ${enabled?"checked":""}> 화로 포함</label><code>${esc(s.title||s.href)}</code><span class="small">${esc(kindText)}${s.reason?` · ${esc(s.reason)}`:""} · ${esc(s.href)}</span>`;
+    row.querySelector("input").onchange=async e=>{
+     state.epubSectionSelections.set(key,e.target.checked);
+     await rebuildCollectionCandidatesFromSelections();
+    };
+    area.appendChild(row);
+   }
+  }
+  return;
+ }
+ // 단일/여러 TXT
  const list=state.rawTxtMarkers||[];
  if(!list.length){card.classList.add("hidden");area.innerHTML="";return}
  card.classList.remove("hidden");area.innerHTML="";
@@ -1437,6 +1463,117 @@ async function parseEpubUnit(bytes,name,index){
  }
  return {index,name,bytes,zip,opfPath,opfDir,opf,manifest,spine,title,creator,folder,volume,coverImageHref,coverPageHref};
 }
+// 유닛 자기 목차(nav/ncx)가 실제로 가리키는 본문 파일들의 정규화 경로(opfDir 기준) 집합.
+// 표지·판권·내부 목차 페이지는 보통 목차에 없으므로 화이트리스트에서 자동으로 빠진다.
+async function unitTocHrefSet(unit){
+ let tree=[];
+ try{tree=await unitInternalTree(unit);}catch(e){tree=[];}
+ if(!tree.length)return null;
+ const set=new Set();
+ const walk=node=>{
+  if(node.href){const p=normalizePath(relative(unit.opfDir,node.href.split("#")[0]));if(p)set.add(p);}
+  if(node.children)for(const ch of node.children)walk(ch);
+ };
+ for(const n of tree)walk(n);
+ return set.size?set:null;
+}
+// guide(EPUB2)·spine linear="no" 로 표지·목차·판권 등 부가 페이지의 전체 경로를 표시.
+function unitFrontBackHrefSet(unit){
+ const set=new Set();
+ const add=href=>{if(href){const p=normalizePath(join(unit.opfDir,href.split("#")[0]));if(p)set.add(p);}};
+ try{
+  const guide=firstDesc(unit.opf,"guide");
+  if(guide)for(const ref of descendants(guide,"reference")){
+   const t=(ref.getAttribute("type")||"").toLowerCase();
+   if(/(cover|toc|title-?page|copyright|colophon|acknowledge|dedication|epigraph|foreword|preface|glossary|index|bibliography|landmark)/.test(t))add(ref.getAttribute("href"));
+  }
+ }catch(e){}
+ for(const sp of unit.spine)if((sp.linear||"yes")==="no")add(sp.href);
+ return set;
+}
+// 본문 대비 링크 비중이 압도적으로 높고 링크가 같은 EPUB의 다른 xhtml을 가리키면 목차 페이지로 본다(이름 무관).
+function isTocLikeXhtml(text){
+ try{
+  const d=parseXML(text,"XHTML");
+  const body=firstDesc(d,"body");if(!body)return false;
+  const anchors=descendants(body,"a").filter(a=>a.getAttribute("href"));
+  if(anchors.length<3)return false;
+  let internal=0;
+  for(const a of anchors){const h=(a.getAttribute("href")||"").split("#")[0];if(/\.x?html?$/i.test(h))internal++;}
+  const txt=(body.textContent||"").replace(/\s+/g," ").trim();
+  const linkText=anchors.map(a=>a.textContent||"").join(" ").replace(/\s+/g," ").trim();
+  return internal>=3 && txt.length>0 && (linkText.length/txt.length)>=0.6;
+ }catch(e){return false}
+}
+// 유닛의 spine xhtml을 표지/목차/판권/본문으로 분류한다(중복 판정은 후보 생성 단계에서 처리).
+function classifyUnitSections(unit){
+ let navSet=unit._navSet;
+ // 목차 커버리지가 너무 낮으면(평탄 nav 등) 화이트리스트로 쓰지 않는다.
+ if(navSet){
+  const xhtmls=unit.spine.filter(it=>/xhtml|html/.test(it.media||""));
+  const covered=xhtmls.filter(it=>navSet.has(normalizePath(it.href.split("#")[0]))).length;
+  if(!xhtmls.length||covered/xhtmls.length<0.3)navSet=null;
+ }
+ const frontBack=unitFrontBackHrefSet(unit);
+ const removeAds=$("removeCopyrightAds")?.checked!==false;
+ const sections=[];
+ for(const it of unit.spine){
+  if(!/xhtml|html/.test(it.media||""))continue;
+  const fullPath=normalizePath(join(unit.opfDir,it.href));
+  const navKey=normalizePath(it.href.split("#")[0]);
+  let kind="chapter",reason="",autoInclude=true;
+  if(looksLikeImageOnlyXhtml(it.xhtmlText)){kind="cover";reason="이미지 전용(표지 등)";autoInclude=false;}
+  else if(isTocLikeXhtml(it.xhtmlText)){kind="toc";reason="내부 목차 페이지";autoInclude=false;}
+  else if(frontBack.has(fullPath)){kind="front";reason="표지·목차·판권 등 부가 페이지";autoInclude=false;}
+  else if(navSet&&!navSet.has(navKey)){kind="front";reason="원본 목차에 없는 부가 페이지";autoInclude=false;}
+  else if(removeAds&&isLikelyNonBody(it,it.title,it.index,it.xhtmlText)){kind="front";reason="판권·광고·부가 페이지";autoInclude=false;}
+  sections.push({href:it.href,fullPath,navKey,title:it.title,spineIndex:it.index,originalId:it.originalId||it.id,media:it.media,content:it.xhtmlText,kind,reason,autoInclude});
+ }
+ return sections;
+}
+// 선택 맵(포함=true)에 따라 합본 본문 후보를 만든다. 중복 본문은 첫 번째만 남긴다.
+function buildCollectionCandidates(units,selections){
+ const candidates=[];let ci=0;const cleanupRemoved=[],dedupRemoved=[],seen=new Map();
+ for(const unit of units){
+  unit.skipXhtml=new Set();
+  for(const s of unit.sections){
+   const key=`${unit.index}::${s.href}`;
+   if(selections.get(key)===false){
+    unit.skipXhtml.add(s.fullPath);
+    cleanupRemoved.push({name:unit.name,title:s.title,href:s.href,reason:s.reason||"사용자 제외"});
+    continue;
+   }
+   const dupKey=$("removeDuplicateContent")?.checked!==false?contentDedupKey(s.content):null;
+   if(dupKey&&seen.has(dupKey)){
+    unit.skipXhtml.add(s.fullPath);
+    dedupRemoved.push({name:unit.name,title:s.title,href:s.href,duplicateOf:seen.get(dupKey).title});
+    continue;
+   }
+   const outputHref=`${unit.folder}/${s.fullPath}`;
+   const c={id:`epubset_${unit.index}_${s.originalId}_${ci}`,href:outputHref,media:s.media,title:s.title,index:ci++,linear:"yes",sourceFile:unit.name,sourceVolume:unit.volume.label,unitIndex:unit.index,originalId:s.originalId,originalHref:s.href,content:s.content,sourceKind:"epub"};
+   candidates.push(c);if(dupKey)seen.set(dupKey,c);
+  }
+ }
+ return {candidates,cleanupRemoved,dedupRemoved};
+}
+// 후보 체크리스트 토글 시 합본 후보와 권 목차를 실제로 다시 구성한다(= 진짜 제외/복원).
+async function rebuildCollectionCandidatesFromSelections(){
+ if(state.inputType!=="epub_collection")return;
+ const {candidates,cleanupRemoved,dedupRemoved}=buildCollectionCandidates(state.epubUnits,state.epubSectionSelections);
+ state.candidates=candidates;state.spine=candidates;
+ state.cleanupRemoved=cleanupRemoved;state.dedupRemoved=dedupRemoved;
+ state.manualGrouping=false;
+ state.groups=await collectionGroupsExpanded(state.epubUnits,candidates);
+ if(!state.groups.length)state.groups=mergeChapterLevelSupplements(state.epubUnits.map(unit=>({
+  title:unit.volume.label||unit.title||`제${unit.index+1}권`,
+  info:unit.volume,
+  chapters:candidates.filter(c=>c.unitIndex===unit.index).map(c=>({title:c.title,sourceId:c.id})),
+  coverFile:null,coverMode:"none",originalCoverHref:null
+ }))).filter(g=>g.chapters.length);
+ renderGroups();updateCleanupSummary();renderCandidateReview();$("buildBtn").disabled=false;
+ $("fileInfo").textContent=`${state.title} · EPUB ${state.epubUnits.length}권 · 본문 후보 ${candidates.length}개`;
+}
+
 async function analyzeEpubCollectionFiles(entries,outerName){
  const units=[];
  for(let i=0;i<entries.length;i++){
@@ -1446,20 +1583,11 @@ async function analyzeEpubCollectionFiles(entries,outerName){
  units.sort((a,b)=>compareVolumeInfo(a.volume,b.volume));
  units.forEach((u,i)=>{u.index=i;u.folder=safeUnitFolder(i)});
 
- const candidates=[];let ci=0;const cleanupRemoved=[],dedupRemoved=[],seenContent=new Map();
- for(const unit of units){
-  unit.skipXhtml=new Set();
-  for(const it of unit.spine){
-   if(!/xhtml|html/.test(it.media||""))continue;
-   if(unit.coverPageHref&&it.href===unit.coverPageHref){unit.skipXhtml.add(join(unit.opfDir,it.href));continue}
-   if($("removeCopyrightAds")?.checked!==false&&isLikelyNonBody(it,it.title,it.index,it.xhtmlText)){cleanupRemoved.push({name:unit.name,title:it.title,href:it.href,reason:"판권·광고·부가 페이지"});unit.skipXhtml.add(join(unit.opfDir,it.href));continue}
-   const key=$("removeDuplicateContent")?.checked!==false?contentDedupKey(it.xhtmlText):null;
-   if(key&&seenContent.has(key)){dedupRemoved.push({name:unit.name,title:it.title,href:it.href,duplicateOf:seenContent.get(key).title});unit.skipXhtml.add(join(unit.opfDir,it.href));continue}
-   const outputHref=`${unit.folder}/${join(unit.opfDir,it.href)}`;
-   const candidate={id:`epubset_${unit.index}_${it.originalId||it.id}_${ci}`,href:outputHref,media:it.media,title:it.title,index:ci++,linear:it.linear,sourceFile:unit.name,sourceVolume:unit.volume.label,unitIndex:unit.index,originalId:it.originalId||it.id,originalHref:it.href,content:it.xhtmlText,sourceKind:"epub"};
-   candidates.push(candidate);if(key)seenContent.set(key,candidate);
-  }
- }
+ // 각 EPUB의 자기 목차(nav/ncx)와 구조로 표지·목차·판권을 판별해 화가 아닌 것은 후보에서 제외한다.
+ for(const unit of units){unit._navSet=await unitTocHrefSet(unit);unit.sections=classifyUnitSections(unit);}
+ const sectionSelections=new Map();
+ for(const unit of units)for(const s of unit.sections)sectionSelections.set(`${unit.index}::${s.href}`,s.autoInclude);
+ const {candidates,cleanupRemoved,dedupRemoved}=buildCollectionCandidates(units,sectionSelections);
  const meta=parseAuthorTitleFromFilename(outerName||units[0]?.name||"");
  const title=$("bookTitle").value.trim()||meta.title||units[0]?.title||"EPUB 합본";
  const creator=$("bookCreator").value.trim()||meta.author||units.find(x=>x.creator)?.creator||"";
@@ -1469,7 +1597,8 @@ async function analyzeEpubCollectionFiles(entries,outerName){
   manifest:new Map(),spine:candidates,candidates,groups:[],
   title,creator,navHref:"nav.xhtml",ncxHref:"toc.ncx",txtFiles:[],
   coverCandidates:[],sourceCoverByGroup:new Map(),manualGrouping:false,
-  epubUnits:units,cleanupRemoved,dedupRemoved,mixedTxtFiles:[]
+  epubUnits:units,cleanupRemoved,dedupRemoved,mixedTxtFiles:[],
+  epubSectionSelections:sectionSelections
  };
  $("bookTitle").value=title;$("bookCreator").value=creator;refreshDefaultOutputFilename(true);
  $("fileInfo").textContent=`${title} · EPUB ${units.length}권 · 본문 후보 ${candidates.length}개`;
@@ -1481,8 +1610,9 @@ async function analyzeEpubCollectionFiles(entries,outerName){
   chapters:candidates.filter(c=>c.unitIndex===unit.index).map(c=>({title:c.title,sourceId:c.id})),
   coverFile:null,coverMode:"none",originalCoverHref:null
  })).filter(g=>g.chapters.length);
- renderGroups();updateCleanupSummary();$("buildBtn").disabled=false;
- setStatus(`EPUB 묶음 분석 완료\nEPUB: ${units.length}개\n본문 후보: ${candidates.length}개\n권 순서: ${state.groups.map(g=>g.title).join(" → ")}\n각 원본 EPUB은 독립 폴더에 보존됩니다.`);
+ renderGroups();updateCleanupSummary();renderCandidateReview();$("buildBtn").disabled=false;
+ const excluded=state.epubUnits.reduce((n,u)=>n+u.sections.filter(s=>!s.autoInclude).length,0);
+ setStatus(`EPUB 묶음 분석 완료\nEPUB: ${units.length}개\n본문 후보(화): ${candidates.length}개\n표지·목차·판권 등 자동 제외: ${excluded}개\n권 순서: ${state.groups.map(g=>g.title).join(" → ")}\n\n각 EPUB의 원본 목차(nav/ncx)와 페이지 구조로 화만 골라냈습니다.\n아래 '감지된 화 후보 확인'에서 잘못 빠지거나 들어간 페이지를 직접 켜고 끌 수 있습니다.`);
 }
 function cleanTxtUnitTitle(name){
  const b=stripKnownExtension(name).replace(/^\s*\[[^\]]+\]\s*/,"").trim();
@@ -3362,14 +3492,24 @@ function rescanTxtWithCurrentPattern(){
  }
  renderCandidateReview();rebuildTxtCandidatesFromSelections();renderMobileTree();updatePreflight();
 }
-$("selectAllCandidatesBtn").onclick=()=>{
- for(const m of state.rawTxtMarkers||[])state.candidateSelections.set(m.key,true);
+function setAllCandidateSelections(value){
+ if(state.inputType==="epub_collection"&&state.epubUnits?.length){
+  for(const unit of state.epubUnits)for(const s of unit.sections||[])state.epubSectionSelections.set(`${unit.index}::${s.href}`,value);
+  rebuildCollectionCandidatesFromSelections().then(()=>{renderMobileTree();updatePreflight();});
+  return;
+ }
+ for(const m of state.rawTxtMarkers||[])state.candidateSelections.set(m.key,value);
  renderCandidateReview();rebuildTxtCandidatesFromSelections();renderMobileTree();updatePreflight();
-};
-$("deselectAllCandidatesBtn").onclick=()=>{
- for(const m of state.rawTxtMarkers||[])state.candidateSelections.set(m.key,false);
- renderCandidateReview();rebuildTxtCandidatesFromSelections();renderMobileTree();updatePreflight();
-};
+}
+// 합본에서 '자동 판정으로 되돌리기'
+function resetCollectionSelectionsToAuto(){
+ if(state.inputType!=="epub_collection")return;
+ for(const unit of state.epubUnits)for(const s of unit.sections||[])state.epubSectionSelections.set(`${unit.index}::${s.href}`,s.autoInclude);
+ rebuildCollectionCandidatesFromSelections().then(()=>{renderMobileTree();updatePreflight();});
+}
+$("selectAllCandidatesBtn").onclick=()=>setAllCandidateSelections(true);
+$("deselectAllCandidatesBtn").onclick=()=>setAllCandidateSelections(false);
+$("resetCandidatesAutoBtn")?.addEventListener("click",resetCollectionSelectionsToAuto);
 document.querySelectorAll('input[name="txtDetectMode"]').forEach(x=>x.addEventListener("change",rescanTxtWithCurrentPattern));
 $("customDetectPattern").addEventListener("change",()=>{if(currentTxtDetectMode()==="custom")rescanTxtWithCurrentPattern()});
 $("includeSpecialTitles").addEventListener("change",rescanTxtWithCurrentPattern);
