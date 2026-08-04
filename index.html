@@ -658,23 +658,27 @@ function matchingRequestedTitle(sourceTitle,requestedTitle){
  return Boolean(a&&b&&a===b);
 }
 // 파일 텍스트 안에서 '권' 구분 줄(합본에서 1권 / 2권 / [3권] / 제4권 / 외전 권 등)을 찾는다.
-// 표지/판권의 '해의 흔적 1권' 같은 제목 줄은 앞에 글자가 있어 걸리지 않는다(오탐 방지).
+// 오탐을 줄이기 위해 '권/외전 볼륨' 형태로 아주 정확히 떨어지는 짧은 줄만 인정한다.
 function findVolumeMarkersInText(lines){
  const marks=[];
  for(let i=0;i<lines.length;i++){
-  const s=String(lines[i]||"").trim();
-  if(!s||s.length>40)continue;
-  if(/^\[.+\]$/.test(s)&&/(권|외전|특별편|번외)/.test(s)){marks.push({lineIndex:i,label:s.replace(/^\[(.+)\]$/,"$1").trim()});continue;}
-  if(/^(?:제\s*)?\d+\s*권(?:\s*\(.+\))?$/.test(s)){marks.push({lineIndex:i,label:s});continue;}
-  if(/^(?:외전|특별편|번외편?)\s*\d*\s*권$/.test(s)){marks.push({lineIndex:i,label:s});continue;}
+  let s=String(lines[i]||"").trim();
+  if(!s||s.length>24)continue;
+  // 대괄호로 감싼 경우 안쪽만 검사([1권], [외전 권] 등). 아무 대괄호 줄이나 잡지 않는다.
+  const bracket=/^\[(.+)\]$/.exec(s);
+  const inner=bracket?bracket[1].trim():s;
+  if(/^(?:제\s*)?\d+\s*권(?:\s*\(.{1,12}\))?$/.test(inner)){marks.push({lineIndex:i,label:inner});continue;}
+  if(/^(?:외전|특별편|번외편?)\s*\d*\s*권$/.test(inner)){marks.push({lineIndex:i,label:inner});continue;}
  }
  return marks;
 }
-// 파일을 내부 '권' 구분에 따라 섹션으로 나눈다. 내부 구분이 없으면 파일 전체가 1개 섹션(파일 라벨).
+// 파일을 내부 '권' 구분에 따라 섹션으로 나눈다.
+// 실제 합본(권 마커가 2개 이상)일 때만 분할하고, 그 외에는 파일 전체를 1개 섹션으로 둔다
+// (일반 다권 업로드=파일 하나가 곧 한 권인 경우를 건드리지 않기 위함).
 function volumeSectionsOfFile(file,lines){
  const fileLabel=(file.volume||volumeInfoFromFilename(file.name)).label;
  const marks=findVolumeMarkersInText(lines);
- if(!marks.length)return [{label:fileLabel,start:0,end:lines.length}];
+ if(marks.length<2)return [{label:fileLabel,start:0,end:lines.length}];
  const secs=[];
  if(marks[0].lineIndex>0)secs.push({label:fileLabel,start:0,end:marks[0].lineIndex});
  for(let i=0;i<marks.length;i++){
