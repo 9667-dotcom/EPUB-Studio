@@ -208,6 +208,10 @@ window.addEventListener("unhandledrejection",function(e){
 </div>
 
 <div id="mappingSummary" class="mapping-summary"></div>
+<div class="row">
+  <button id="removeUnassignedBtn" type="button" class="light">미배정 화 모두 제외</button>
+  <span class="small">붙여넣은 목차에 있지만 원본에서 못 찾은 항목을 한 번에 목차에서 뺍니다(원본 본문은 삭제되지 않음).</span>
+</div>
 <div id="groupArea"></div>
 
 <div id="chapterPreview" class="preview-panel">
@@ -419,7 +423,11 @@ function isSupplementVolumeName(name){
 }
 
 function volumeInfoFromFilename(name){
- const base=stripKnownExtension(name).normalize("NFC");
+ // @uno, @무료, @completed 같은 배포 태그와 (완결)/(합본) 등 꼬리표를 먼저 걷어내
+ // '...1권@uno' 처럼 권 번호 뒤에 붙은 태그 때문에 권 인식이 깨지지 않게 한다.
+ const base=stripKnownExtension(name).normalize("NFC")
+  .replace(/@[0-9A-Za-z가-힣_.-]+/g," ")
+  .replace(/\s+/g," ").trim();
  // '외전 권'·'외전 1권'·'특별편 권' 등 '권'이 붙은 부록은 하나의 권(볼륨)으로,
  // 그냥 '외전'·'외전 1'·'특별편'은 화(챕터)로 구분한다(chapterLevel).
  // (일반 'N권'보다 먼저 검사해야 '외전 2권'이 일반 2권으로 오인되지 않는다.)
@@ -430,7 +438,7 @@ function volumeInfoFromFilename(name){
    const n=suppVol[2]?Number(suppVol[2]):1;
    return {label:n<=1?`${kw} 권`:`${kw} ${n}권`,kind:isSpecial?3:2,number:n,chapterLevel:false};
  }
- const num=base.match(/(?:^|\s)(\d+)\s*권(?:\s|$|\()/i);
+ const num=base.match(/(?:^|[\s\[(])(\d+)\s*권(?![0-9가-힣])/);
  if(num)return {label:`${Number(num[1])}권`,kind:0,number:Number(num[1]),chapterLevel:false};
  const ext=base.match(/외전\s*(\d+)?/i);
  if(ext){
@@ -538,6 +546,8 @@ function updateCleanupSummary(){
 function groupHeading(line){
  const s=line.trim();
  if(/^\[(?:권|상위)\]\s*.+$/i.test(s))return true;
+ // [1권], [7권 (특별 외전)], [9권 (특별 외전2)] 등 대괄호로 감싼 줄은 권 구분으로 인식한다.
+ if(/^\[.+\]$/.test(s))return true;
  // 외전·특별편·번외편은 '권'이 붙어야(또는 위의 [권] 접두사) 볼륨으로 인식한다.
  // 그냥 '외전' / '외전 1'은 화 제목이므로 볼륨으로 빼지 않는다.
  return /^(?:제?\s*\d+\s*(?:권|부)(?:\s*\(\s*(?:외전|특별편|번외편|완결)\s*\))?|외전\s*\d*\s*권|특별편\s*\d*\s*권|번외편?\s*\d*\s*권|special\s*volume(?:\s*\d+)?|side\s*story\s*volume(?:\s*\d+)?)$/i.test(s)
@@ -723,6 +733,15 @@ function rebuildExplicitTocGloballyFromTxt(parsedGroups){
    const sameVol=gvLbl?matches.filter(m=>normVolLbl(m.sourceVolume)===gvLbl):[];
    const pickVol=(sameVol.length?sameVol:matches)[0].sourceVolume;
    matches=matches.filter(m=>m.sourceVolume===pickVol);
+   // 같은 제목·같은 조각(上/中/下 순위)이 한 권 안에서 중복 감지되면(내부 목차·재수록 등)
+   // 본문이 가장 긴 하나만 남긴다. 서로 다른 上·中·下 조각은 그대로 유지한다.
+   const bestByPiece=new Map();
+   for(const m of matches){
+    const k=baseChapterTitle(m.title)+"|"+splitSuffixRank(m.title);
+    const prev=bestByPiece.get(k);
+    if(!prev||(m.content||"").length>(prev.content||"").length)bestByPiece.set(k,m);
+   }
+   matches=[...bestByPiece.values()].sort((a,b)=>a.lineIndex-b.lineIndex);
    for(const match of matches){
     const occurrenceIndex=occurrences.indexOf(match);usedOccurrence.add(occurrenceIndex);
     no++;
@@ -851,7 +870,7 @@ function parseToc(text){
  const lines=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
  let groups=[],cur=null;
  for(const line of lines){
-  if(groupHeading(line)){cur={title:line.replace(/^\[(?:권|상위)\]\s*/i,""),chapters:[],coverFile:null,coverMode:null,originalCoverHref:null};groups.push(cur)}
+  if(groupHeading(line)){cur={title:line.replace(/^\[(?:권|상위)\]\s*/i,"").replace(/^\[(.+)\]$/,"$1").trim(),chapters:[],coverFile:null,coverMode:null,originalCoverHref:null};groups.push(cur)}
   else{if(!cur){cur={title:"본문",chapters:[],coverFile:null,coverMode:null,originalCoverHref:null};groups.push(cur)}cur.chapters.push({title:line,sourceId:null})}
  }
  return groups.filter(g=>g.chapters.length||g.title!=="본문");
@@ -2080,8 +2099,9 @@ ${r.logs.slice(0,300).join("\n")}`);
 
   const hasExplicitGroup=lines.some(x=>groupHeading(x));
 
-  // 다권 원본 + 명시적 권 목차 → 권별 순서(위치) 매칭 (제목/번호 중복에 강함)
-  if(hasExplicitGroup&&sourceVolumesInOrder().length>1){
+  // 다권 EPUB(묶음) + 명시적 권 목차 → 권별 순서(위치) 매칭 (제목/번호 중복에 강함).
+  // TXT는 파일 경계와 무관하게 제목으로 재편성하는 경우가 많으므로 아래의 제목 기반 전역 매칭을 쓴다.
+  if(hasExplicitGroup&&sourceVolumesInOrder().length>1&&!hasTxtSources()){
    const parsed=parseToc(raw);
    const res=assignPastedGroupsPositionalByVolume(parsed);
    commitProjectGroups(maybeSortGroups(res.groups,"pasted"),"positional-by-volume");
@@ -2626,6 +2646,21 @@ function chapterHasVisibleBody(ch){
   .trim();
  return raw.length>0;
 }
+function removeAllUnassignedChapters(){
+ let removed=0;
+ for(const g of state.groups){
+  const before=g.chapters.length;
+  g.chapters=g.chapters.filter(ch=>ch.sourceId);
+  removed+=before-g.chapters.length;
+ }
+ if(!removed){setStatus("미배정 화가 없습니다.");return;}
+ snapshotEditor?.("before-remove-unassigned");
+ state.manualGrouping=true;
+ renderGroups();
+ snapshotEditor?.("after-remove-unassigned");
+ setStatus(`미배정 화 ${removed}개를 목차에서 제외했습니다.\n원본 본문은 삭제하지 않았습니다.`);
+}
+
 function removeChapterFromToc(groupIndex,chapterIndex){
  const g=state.groups[groupIndex];
  if(!g||!g.chapters[chapterIndex])return;
@@ -3533,6 +3568,7 @@ $("confirmAddGroupBtn").onclick=()=>{
 
 
 $("undoBtn").onclick=undoEdit;
+$("removeUnassignedBtn")?.addEventListener("click",removeAllUnassignedChapters);
 $("redoBtn").onclick=redoEdit;
 $("saveProjectBtn").onclick=downloadProject;
 $("loadProjectFile").onchange=async e=>{
