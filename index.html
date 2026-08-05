@@ -209,8 +209,9 @@ window.addEventListener("unhandledrejection",function(e){
 
 <div id="mappingSummary" class="mapping-summary"></div>
 <div class="row">
+  <button id="applyEditsBtn" type="button">반영하기</button>
   <button id="removeUnassignedBtn" type="button" class="light">미배정 화 모두 제외</button>
-  <span class="small">붙여넣은 목차에 있지만 원본에서 못 찾은 항목을 한 번에 목차에서 뺍니다(원본 본문은 삭제되지 않음).</span>
+  <span class="small">제목 수정·제외·권 이동을 한 뒤 <b>반영하기</b>를 누르면 목차·미리보기에 확정 반영됩니다(입력 중에도 자동 저장됩니다).</span>
 </div>
 <div id="groupArea"></div>
 
@@ -546,8 +547,14 @@ function updateCleanupSummary(){
 function groupHeading(line){
  const s=line.trim();
  if(/^\[(?:권|상위)\]\s*.+$/i.test(s))return true;
- // [1권], [7권 (특별 외전)], [9권 (특별 외전2)] 등 대괄호로 감싼 줄은 권 구분으로 인식한다.
- if(/^\[.+\]$/.test(s))return true;
+ // [1권], [7권 (특별 외전)], [9권 (특별 외전2)] 처럼 '대괄호 안이 실제 권 형태'일 때만 권으로 인식.
+ // (게임/채팅 소설의 [일반/미노내꺼: …기권…] 같은 대사 줄이 권으로 오인되지 않게 한다.)
+ const br=/^\[(.+)\]$/.exec(s);
+ if(br){
+  const inner=br[1].trim();
+  if(/^(?:제?\s*\d+\s*(?:권|부)|(?:외전|특별편|번외편?)\s*\d*\s*권|상위)/i.test(inner))return true;
+  return false;
+ }
  // 외전·특별편·번외편은 '권'이 붙어야(또는 위의 [권] 접두사) 볼륨으로 인식한다.
  // 그냥 '외전' / '외전 1'은 화 제목이므로 볼륨으로 빼지 않는다.
  return /^(?:제?\s*\d+\s*(?:권|부)(?:\s*\(\s*(?:외전|특별편|번외편|완결)\s*\))?|외전\s*\d*\s*권|특별편\s*\d*\s*권|번외편?\s*\d*\s*권|special\s*volume(?:\s*\d+)?|side\s*story\s*volume(?:\s*\d+)?)$/i.test(s)
@@ -653,9 +660,59 @@ function originalGroupTitleForCandidate(candidate){
 }
 
 function matchingRequestedTitle(sourceTitle,requestedTitle){
- const key=value=>baseChapterTitle(String(value||"").replace(/^(외전|특별편|번외편)\s*[.．:：-]\s*/i,"$1 "));
+ const key=value=>baseChapterTitle(String(value||"").replace(/^(외전|특별편|번외편)\s*[.．:：-]\s*/i,"$1 ")).replace(/[.．,，·・:：;]/g,"");
  const a=key(sourceTitle),b=key(requestedTitle);
  return Boolean(a&&b&&a===b);
+}
+// 문장부호·공백·번호표기 차이는 무시하고, 길이가 비슷할 때만 유사도(약 70%)로 보조 매칭한다.
+// (짧은 제목이 긴 본문 산문에 잘못 붙는 것을 막기 위해 길이 비율을 함께 본다.)
+// 요청 제목이 '순수 번호'(1, 1., 15화, 제15화 등)면 그 숫자를 돌려준다. 아니면 null.
+function requestedPureNumber(title){
+ const m=String(title||"").trim().match(/^(?:제\s*)?(\d+)\s*(?:화|장|회|편|\.)?\s*$/);
+ return m?Number(m[1]):null;
+}
+// 원본 줄이 '제목형'(번호 뒤에 . ) : 화 장 회 편 또는 공백/끝)일 때 앞 번호를 돌려준다.
+// '15년 전', '15명이' 같은 본문은 걸리지 않는다.
+function sourceHeadingNumber(title){
+ const s=String(title||"").trim();
+ // 'N. 제목'(마침표 뒤 공백/끝) 또는 'N화 …' 형태만 헤딩 번호로 인정.
+ // '1)', '1.BUM', '2.핌' 같은 본문/목록 줄은 제외한다.
+ const m=s.match(/^(?:제\s*)?(\d+)\s*(?:[.．][\s)]|[.．]$|화|장|회|편|:\s)/);
+ return m?Number(m[1]):null;
+}
+// '1.-7.', '15~45화', '1~7', '3화-9화' 같은 범위 한 줄을 개별 번호 제목 배열로 확장한다.
+function expandRangeToken(line){
+ const s=String(line||"").trim();
+ const m=s.match(/^(?:제\s*)?(\d+)\s*(화|장|회|편|\.)?\s*[~\-–—∼]\s*(?:제\s*)?(\d+)\s*(화|장|회|편|\.)?\s*$/);
+ if(!m)return null;
+ const a=Number(m[1]),b=Number(m[3]);
+ if(!(b>=a)||b-a>3000)return null;
+ const suffix=m[4]||m[2]||"";
+ const out=[];for(let n=a;n<=b;n++)out.push(`${n}${suffix}`);
+ return out;
+}
+// 목차 줄 배열에서 범위 줄을 개별 번호 줄로 펼친다.
+function expandRangeLines(lines){
+ const out=[];
+ for(const l of lines){const ex=expandRangeToken(l);if(ex)out.push(...ex);else out.push(l);}
+ return out;
+}
+function titleMatchesLoose(sourceTitle,requestedTitle){
+ // 요청이 '순수 번호'(범위 확장 결과 등)면 원본이 진짜 헤딩('N. 제목' / 'N화 …')일 때만,
+ // 그 앞 번호로만 매칭한다. ('1)', '1.BUM' 같은 본문/목록 줄은 배정하지 않는다.)
+ const rn=requestedPureNumber(requestedTitle);
+ if(rn!=null){const sn=sourceHeadingNumber(sourceTitle);return sn!=null&&sn===rn;}
+ if(matchingRequestedTitle(sourceTitle,requestedTitle))return true;
+ const strip=v=>String(v||"").normalize("NFKC").toLowerCase()
+   .replace(/[\s\u2018\u2019\u201c\u201d'"`.,·・、。!?！？~〜()\[\]{}<>:：;/\\|_\-–—+=*&^%$#@]/g,"");
+ const a=strip(sourceTitle),b=strip(requestedTitle);
+ if(!a||!b)return false;
+ if(a===b)return true;                                  // 문장부호·공백·번호표기 차이 → 정확 일치로 처리
+ if(a.length<4||b.length<4)return false;                // 짧은 제목/대사는 오탐 위험 → 정확 일치만
+ const lr=Math.min(a.length,b.length)/Math.max(a.length,b.length);
+ if(lr<0.7)return false;                                // 길이가 많이 다르면 제외(본문 산문 방지)
+ if(a.includes(b)||b.includes(a))return true;           // 접미 수식어 차이 등 포함 관계
+ return similarity(sourceTitle,requestedTitle)>=0.75;   // 그 외에는 70%대 유사일 때만
 }
 // 파일 텍스트 안에서 '권' 구분 줄(합본에서 1권 / 2권 / [3권] / 제4권 / 외전 권 등)을 찾는다.
 // 오탐을 줄이기 위해 '권/외전 볼륨' 형태로 아주 정확히 떨어지는 짧은 줄만 인정한다.
@@ -694,7 +751,7 @@ function findRequestedHeadingsInTxt(file,requestedLines){
   if(tocRange&&i>=tocRange.start&&i<tocRange.end)continue;
   const raw=lines[i].trim();
   if(!raw||raw.length>180)continue;
-  const requested=requestedLines.find(title=>matchingRequestedTitle(raw,title));
+  const requested=requestedLines.find(title=>titleMatchesLoose(raw,title));
   if(!requested)continue;
   // Only accept heading-like short lines, not mentions inside prose.
   if(raw.length>Math.max(80,requested.length+20))continue;
@@ -710,7 +767,24 @@ function titleMatchesRequestedPiece(sourceTitle,requestedTitle){
  if(requestedTitleHasSplitSuffix(requestedTitle)){
   return normalizeEmbeddedHeading(sourceTitle)===normalizeEmbeddedHeading(requestedTitle);
  }
- return matchingRequestedTitle(sourceTitle,requestedTitle);
+ return titleMatchesLoose(sourceTitle,requestedTitle);
+}
+// 파일 안의 '부' 구분 줄(<1부>, <제2부>, 1부, 제2부 단독 줄)을 찾는다.
+// 부는 여러 권 파일에 걸쳐 있고 부마다 화 번호가 재시작하는 소설을 위한 것.
+function findPartMarkersInText(lines){
+ const marks=[];
+ for(let i=0;i<lines.length;i++){
+  const s=String(lines[i]||"").trim();
+  if(!s||s.length>16)continue;
+  const m=s.match(/^<?\s*(?:제\s*)?(\d+)\s*부\s*>?$/);
+  if(m)marks.push({lineIndex:i,label:`${Number(m[1])}부`});
+ }
+ return marks;
+}
+function partLabelAt(marks,lineIndex){
+ let lbl=null;
+ for(const m of marks){if(m.lineIndex<=lineIndex)lbl=m.label;else break;}
+ return lbl;
 }
 function rebuildExplicitTocGloballyFromTxt(parsedGroups){
  const files=availableTxtSources().slice().sort((a,b)=>compareVolumeInfo(a.volume||volumeInfoFromFilename(a.name),b.volume||volumeInfoFromFilename(b.name)));
@@ -719,6 +793,7 @@ function rebuildExplicitTocGloballyFromTxt(parsedGroups){
  for(const file of files){
   const lines=normalizeTxt(file.text).split("\n");
   const tocRange=detectInternalTocRange(lines);
+  const partMarks=findPartMarkersInText(lines);
   const sections=volumeSectionsOfFile(file,lines);
   for(const sec of sections){
    const markers=[];
@@ -740,6 +815,7 @@ function rebuildExplicitTocGloballyFromTxt(parsedGroups){
     occurrences.push({
      file,
      sourceVolume:sec.label,
+     partLabel:partLabelAt(partMarks,cur.lineIndex),
      lineIndex:cur.lineIndex,
      title:cur.title,
      requestedTitle:cur.requestedTitle,
@@ -764,20 +840,33 @@ function rebuildExplicitTocGloballyFromTxt(parsedGroups){
     logs.push(`미배정: ${group.title} / ${requestedChapter.title}`);
     continue;
    }
-   // 목차 한 줄 = 화 하나. 같은 제목이 여러 권에 있으면, 붙여넣은 권과 같은 권을 우선하고
-   // 그런 게 없으면 가장 앞선 한 권에서만 가져온다(上·中·下 조각은 같은 권 안에서 함께 유지).
-   const sameVol=gvLbl?matches.filter(m=>normVolLbl(m.sourceVolume)===gvLbl):[];
-   const pickVol=(sameVol.length?sameVol:matches)[0].sourceVolume;
-   matches=matches.filter(m=>m.sourceVolume===pickVol);
-   // 같은 제목·같은 조각(上/中/下 순위)이 한 권 안에서 중복 감지되면(내부 목차·재수록 등)
-   // 본문이 가장 긴 하나만 남긴다. 서로 다른 上·中·下 조각은 그대로 유지한다.
-   const bestByPiece=new Map();
-   for(const m of matches){
-    const k=baseChapterTitle(m.title)+"|"+splitSuffixRank(m.title);
-    const prev=bestByPiece.get(k);
-    if(!prev||(m.content||"").length>(prev.content||"").length)bestByPiece.set(k,m);
+   // 목차 한 줄 = 화 하나. 붙여넣은 그룹 제목(권/부)과 같은 범위를 우선한다.
+   // 부(<N부>)로 매칭되면 그 부 전체(여러 권에 걸침)에서, 아니면 같은 권에서 가져온다.
+   const belongs=m=>gvLbl&&(normVolLbl(m.sourceVolume)===gvLbl||normVolLbl(m.partLabel)===gvLbl);
+   const sameVol=gvLbl?matches.filter(belongs):[];
+   let pool;
+   if(sameVol.length){
+    const byPart=sameVol.filter(m=>normVolLbl(m.partLabel)===gvLbl);
+    if(byPart.length)pool=byPart;
+    else{const pv=sameVol[0].sourceVolume;pool=sameVol.filter(m=>m.sourceVolume===pv);}
+   }else{
+    const pv=matches[0].sourceVolume;pool=matches.filter(m=>m.sourceVolume===pv);
    }
-   matches=[...bestByPiece.values()].sort((a,b)=>a.lineIndex-b.lineIndex);
+   const ford=(a,b)=>compareVolumeInfo(a.file.volume||volumeInfoFromFilename(a.file.name),b.file.volume||volumeInfoFromFilename(b.file.name))||a.lineIndex-b.lineIndex;
+   if(requestedPureNumber(requestedChapter.title)!=null){
+    // 순수 번호(범위 확장): 그 부/권 안에서 가장 앞선 진짜 헤딩 하나만 배정
+    // (본문 속 'N. …' 재등장이나 권 경계 분할로 인한 중복 배정을 막는다)
+    matches=[pool.slice().sort(ford)[0]];
+   }else{
+    // 같은 제목·같은 조각이 중복 감지되면 본문이 가장 긴 하나만. 上·中·下 조각은 유지.
+    const bestByPiece=new Map();
+    for(const m of pool){
+     const k=baseChapterTitle(m.title)+"|"+splitSuffixRank(m.title);
+     const prev=bestByPiece.get(k);
+     if(!prev||(m.content||"").length>(prev.content||"").length)bestByPiece.set(k,m);
+    }
+    matches=[...bestByPiece.values()].sort((a,b)=>a.lineIndex-b.lineIndex);
+   }
    for(const match of matches){
     const occurrenceIndex=occurrences.indexOf(match);usedOccurrence.add(occurrenceIndex);
     no++;
@@ -800,6 +889,9 @@ function rebuildFlatTocDirectlyFromTxt(requestedLines){
   .sort((a,b)=>compareVolumeInfo(a.volume||volumeInfoFromFilename(a.name),b.volume||volumeInfoFromFilename(b.name)));
  const groups=[],candidates=[],logs=[],matchedRequested=new Set();
  let candidateNo=0;
+ // 범위에서 펼쳐진 '순수 번호' 요청(1., 2., 15화 …)은 권마다 번호가 재시작해도
+ // 가장 앞선 권의 해당 화 하나에만 배정되도록 전역으로 한 번만 사용한다.
+ const usedPureNum=new Set();
 
  for(const file of files){
   const textLines=normalizeTxt(file.text).split("\n");
@@ -812,8 +904,10 @@ function rebuildFlatTocDirectlyFromTxt(requestedLines){
     if(tocRange&&i>=tocRange.start&&i<tocRange.end)continue;
     const raw=textLines[i].trim();
     if(!raw||raw.length>180)continue;
-    const req=requestedLines.find(title=>matchingRequestedTitle(raw,title));
+    const req=requestedLines.find(title=>titleMatchesLoose(raw,title));
     if(!req)continue;
+    const pn=requestedPureNumber(req);
+    if(pn!=null&&usedPureNum.has(pn))continue;
     if(raw.length>Math.max(80,req.length+20))continue;
     secMarkers.push({lineIndex:i,title:raw,requestedTitle:req});
    }
@@ -853,6 +947,7 @@ function rebuildFlatTocDirectlyFromTxt(requestedLines){
     candidates.push(candidate);
     group.chapters.push({title:cur.title,sourceId:id,requestedTitle:cur.requestedTitle});
     matchedRequested.add(cur.requestedTitle);
+    {const pn=requestedPureNumber(cur.requestedTitle);if(pn!=null)usedPureNum.add(pn);}
     logs.push(`${cur.requestedTitle} → ${group.title} / ${cur.title}`);
    }
    if(group.chapters.length)groups.push(group);
@@ -929,7 +1024,12 @@ function parseToc(text){
  let groups=[],cur=null;
  for(const line of lines){
   if(groupHeading(line)){cur={title:line.replace(/^\[(?:권|상위)\]\s*/i,"").replace(/^\[(.+)\]$/,"$1").trim(),chapters:[],coverFile:null,coverMode:null,originalCoverHref:null};groups.push(cur)}
-  else{if(!cur){cur={title:"본문",chapters:[],coverFile:null,coverMode:null,originalCoverHref:null};groups.push(cur)}cur.chapters.push({title:line,sourceId:null})}
+  else{
+   if(!cur){cur={title:"본문",chapters:[],coverFile:null,coverMode:null,originalCoverHref:null};groups.push(cur)}
+   const ex=expandRangeToken(line);
+   if(ex){for(const t of ex)cur.chapters.push({title:t,sourceId:null});}
+   else cur.chapters.push({title:line,sourceId:null});
+  }
  }
  return groups.filter(g=>g.chapters.length||g.title!=="본문");
 }
@@ -987,6 +1087,31 @@ function cleanDescription(text){
  }
  return out.join("\n").trim();
 }
+// 모바일/클라우드(드라이브 등) 파일에서 간헐적으로 읽기 실패하는 경우를 위해
+// 재시도 + FileReader 폴백으로 안정적으로 바이트를 읽는다. ("파일 못 읽겠다" 에러 완화)
+async function readFileBytes(file){
+ let lastErr;
+ for(let attempt=0;attempt<3;attempt++){
+  if(file&&file.arrayBuffer){
+   try{const b=await file.arrayBuffer();if(b&&b.byteLength>=0)return b;}catch(e){lastErr=e;}
+  }
+  try{
+   return await new Promise((res,rej)=>{
+    const fr=new FileReader();
+    fr.onload=()=>res(fr.result);
+    fr.onerror=()=>rej(fr.error||new Error("FileReader 오류"));
+    fr.readAsArrayBuffer(file);
+   });
+  }catch(e){lastErr=e;}
+  await new Promise(r=>setTimeout(r,200*(attempt+1)));
+ }
+ throw new Error(`'${(file&&file.name)||"파일"}'을(를) 읽지 못했습니다. 파일이 클라우드(드라이브 등)에 있으면 기기에 먼저 내려받은 뒤 다시 시도해 주세요. (${lastErr&&lastErr.message||"알 수 없는 오류"})`);
+}
+// CRC 검사는 읽기에 불필요하고 살짝 손상된 파일에서 실패를 유발하므로 끈다.
+async function loadZipBytes(bytes){
+ return await JSZip.loadAsync(bytes,{checkCRC32:false});
+}
+
 function decodeText(bytes, mode="auto"){
  const arr=bytes instanceof Uint8Array?bytes:new Uint8Array(bytes);
  const tryDecode=enc=>{try{return new TextDecoder(enc,{fatal:true}).decode(arr)}catch(e){return null}};
@@ -1487,7 +1612,7 @@ function safeUnitFolder(index){
  return `Sources/vol_${String(index+1).padStart(3,"0")}`;
 }
 async function parseEpubUnit(bytes,name,index){
- const zip=await JSZip.loadAsync(bytes,{checkCRC32:true});
+ const zip=await loadZipBytes(bytes);
  const containerText=await zip.file("META-INF/container.xml")?.async("text");
  if(!containerText)throw new Error(`${name}: META-INF/container.xml이 없습니다.`);
  const container=parseXML(containerText,`${name} container.xml`);
@@ -1722,7 +1847,7 @@ async function appendTxtEntriesToCollection(txtEntries){
 }
 
 async function analyzeZipMixedInput(file){
- const outer=await JSZip.loadAsync(await file.arrayBuffer(),{checkCRC32:true});
+ const outer=await loadZipBytes(await readFileBytes(file));
  const epubNames=Object.keys(outer.files).filter(n=>!outer.files[n].dir&&/\.epub$/i.test(n)).sort((a,b)=>a.localeCompare(b,"ko",{numeric:true}));
  const txtNames=Object.keys(outer.files).filter(n=>!outer.files[n].dir&&/\.txt$/i.test(n)).sort((a,b)=>a.localeCompare(b,"ko",{numeric:true}));
  if(epubNames.length){
@@ -1740,9 +1865,9 @@ async function analyzeZipMixedInput(file){
 async function analyzeTxtInput(f){
  const ext=(f.name.split(".").pop()||"").toLowerCase(),files=[];
  if(ext==="txt"){
-  files.push({name:f.name,text:decodeText(await f.arrayBuffer(),$("txtEncoding").value),volume:volumeInfoFromFilename(f.name)});
+  files.push({name:f.name,text:decodeText(await readFileBytes(f),$("txtEncoding").value),volume:volumeInfoFromFilename(f.name)});
  }else{
-  const z=await JSZip.loadAsync(await f.arrayBuffer(),{checkCRC32:true});
+  const z=await loadZipBytes(await readFileBytes(f));
   const names=Object.keys(z.files).filter(n=>!z.files[n].dir&&/\.txt$/i.test(n)).sort((a,b)=>a.localeCompare(b,"ko",{numeric:true}));
   if(!names.length)throw new Error("ZIP 안에 TXT 또는 EPUB 파일이 없습니다.");
   for(const name of names)files.push({name,text:decodeText(await z.file(name).async("uint8array"),$("txtEncoding").value),volume:volumeInfoFromFilename(name)});
@@ -1779,7 +1904,7 @@ $("analyzeBtn").onclick=async()=>{
   if(selected.length>1){
    if(!selected.every(x=>/\.epub$/i.test(x.name)))throw new Error("여러 파일 직접 선택은 EPUB 파일끼리만 지원합니다.");
    const entries=[];
-   for(const f of selected)entries.push({name:f.name,bytes:await f.arrayBuffer()});
+   for(const f of selected)entries.push({name:f.name,bytes:await readFileBytes(f)});
    await analyzeEpubCollectionFiles(entries,selected[0].name);
    return;
   }
@@ -1792,7 +1917,7 @@ $("analyzeBtn").onclick=async()=>{
   if(ext==="txt"){await analyzeTxtInput(f);return}
   if(ext==="zip"){await analyzeZipMixedInput(f);return}
   if(ext!=="epub")throw new Error("지원 형식은 EPUB, TXT, ZIP(TXT/EPUB)입니다.");
-  const bytes=await f.arrayBuffer(); const zip=await JSZip.loadAsync(bytes,{checkCRC32:true});
+  const bytes=await readFileBytes(f); const zip=await loadZipBytes(bytes);
   const containerText=await zip.file("META-INF/container.xml")?.async("text"); if(!containerText)throw new Error("META-INF/container.xml이 없습니다.");
   const container=parseXML(containerText,"container.xml");
   const rootfile=descendants(container,"rootfile")[0]; if(!rootfile)throw new Error("OPF 경로를 찾지 못했습니다.");
@@ -2135,7 +2260,7 @@ $("applyTocBtn").onclick=()=>{
  try{
   const raw=$("tocText").value.trim();
   if(!raw)throw new Error("목차 입력칸이 비어 있습니다. 원본 구조를 사용하려면 '원본 목차로 자동 구성'을 누르세요.");
-  const lines=raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  const lines=expandRangeLines(raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean));
 
   // 범위 모드: "1권: 1화 ~ 28화" 형식이면 제목이 아니라 순서(번호)로 배정 → 중복 제목 문제 없음
   const ranges=parseVolumeRanges(raw);
@@ -2705,6 +2830,13 @@ function chapterHasVisibleBody(ch){
   .trim();
  return raw.length>0;
 }
+function applyEditorChanges(){
+ state.manualGrouping=true;
+ renderGroups();
+ updatePreflight();
+ setStatus("목차 편집 내용을 반영했습니다.\n제목 수정·제외·순서·권 이동이 모두 적용되었습니다.");
+}
+
 function removeAllUnassignedChapters(){
  let removed=0;
  for(const g of state.groups){
@@ -3627,6 +3759,7 @@ $("confirmAddGroupBtn").onclick=()=>{
 
 
 $("undoBtn").onclick=undoEdit;
+$("applyEditsBtn")?.addEventListener("click",applyEditorChanges);
 $("removeUnassignedBtn")?.addEventListener("click",removeAllUnassignedChapters);
 $("redoBtn").onclick=redoEdit;
 $("saveProjectBtn").onclick=downloadProject;
