@@ -3259,6 +3259,27 @@ async function buildEpubCollection(){
    if(candidate.sourceKind==="txt"&&!zip.file("OEBPS/"+candidate.href)){
     zip.file("OEBPS/"+candidate.href,makeXhtml(ch.title,`<h1 class="chapter-title">${esc(ch.title)}</h1>${txtBodyHtml(candidate.content)}`,"../Styles/hm_builder.css"));
    }
+   // EPUB 화 제목을 편집했으면, 복사된 원본 페이지 안의 첫 '의미 있는' 제목(hN)도 새 제목으로 바꾼다.
+   // (목차뿐 아니라 페이지 안에도 반영. 장면 전환용 '***' 같은 장식 헤딩은 건너뜀.)
+   if(candidate.sourceKind==="epub"&&ch.title&&candidate.title&&ch.title!==candidate.title){
+    const f=zip.file("OEBPS/"+candidate.href);
+    if(f){
+     try{
+      let html=await f.async("text");
+      let done=false;
+      const deco=/^[\s*＊✱﹡·・．.\-–—_=~＝◇◆○●□■▪▫☆★♠♣♥❖◈\u2022\u2026]+$/;
+      const nt=esc(ch.title);
+      let out=html.replace(/<(h[1-6])([^>]*)>([\s\S]*?)<\/\1>/gi,(m,tag,attr,inner)=>{
+       if(done)return m;
+       const txt=inner.replace(/<[^>]+>/g,"").replace(/\s+/g," ").trim();
+       if(!txt||deco.test(txt))return m;
+       done=true;return `<${tag}${attr}>${nt}</${tag}>`;
+      });
+      if(!done)out=html.replace(/<body([^>]*)>/i,(m,a)=>`<body${a}><h1 class="chapter-title">${nt}</h1>`);
+      zip.file("OEBPS/"+candidate.href,out);
+     }catch(e){}
+    }
+   }
    const id=manifest.find(x=>x.href===candidate.href)?.id||add(`chapter_${volNo}_${ng.chapters.length+1}`,candidate.href,candidate.media||"application/xhtml+xml");
    spineIds.push(id);
    ng.chapters.push({title:ch.title,href:candidate.href});
