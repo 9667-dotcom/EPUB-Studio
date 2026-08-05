@@ -518,7 +518,17 @@ function stripHtml(x){
 function titleFromXhtml(text,href){
  try{
   const d=parseXML(text,"XHTML");
-  for(const tag of ["h1","h2","h3","title"]){const e=descendants(d,tag)[0];if(e&&e.textContent.trim())return e.textContent.trim()}
+  const scope=firstDesc(d,"body")||d;
+  // 문서 순서상 첫 번째 '의미 있는' 제목(h1~h6)을 쓴다.
+  // 장면 전환용 '***', '＊＊＊', '◇◇◇', '- - -' 같은 장식 헤딩은 건너뛴다
+  // (제목이 h3에 있고 그 뒤에 h2 '***'가 있는 EPUB에서 제목이 '***'로 잘못 잡히는 것을 방지).
+  const heads=[...scope.getElementsByTagName("*")].filter(n=>/^h[1-6]$/i.test(local(n)));
+  for(const h of heads){
+   const t=(h.textContent||"").replace(/\s+/g," ").trim();
+   if(t&&!/^[\s*＊✱﹡·・．.\-–—_=~＝◇◆○●□■▪▫☆★♠♣♥❖◈\u2022\u2026]+$/.test(t))return t;
+  }
+  const titleEl=descendants(d,"title")[0];
+  if(titleEl&&titleEl.textContent.trim())return titleEl.textContent.trim();
   const body=firstDesc(d,"body"); if(body){const t=(body.textContent||"").replace(/\s+/g," ").trim(); if(t)return t.slice(0,45)}
  }catch(e){}
  return href.split("/").pop()
@@ -590,6 +600,9 @@ function matchLabel(ch){
  const s=similarity(ch.title,src.title);
  if(s>=0.9)return {label:"일치",cls:"match-ok",score:s};
  if(s>=0.55)return {label:"유사",cls:"match-sim",score:s};
+ // EPUB 자체 목차(nav)로 구조적으로 연결된 화는 라벨 글자가 본문과 달라도 정상 연결로 본다.
+ // (예: 원본 목차 라벨이 '(1)','(2)'처럼 본문 제목과 다른 경우 — 생성 차단하지 않음)
+ if(ch.byOriginalToc)return {label:"원본 목차",cls:"match-ok",score:1};
  return {label:"불일치",cls:"match-bad",score:s};
 }
 function mappingStats(){
@@ -2026,11 +2039,11 @@ function groupsFromUnitTree(unit,tree,unitCandidates){
  for(const c of unitCandidates)byPath.set(normalizePath(join(unit.opfDir,c.originalHref||"")),c);
  const used=new Set();let fb=0;
  const resolve=(href,title)=>{
-  if(href){const c=byPath.get(normalizePath(href.split("#")[0]));if(c&&!used.has(c.id)){used.add(c.id);return c.id;}}
+  if(href){const c=byPath.get(normalizePath(href.split("#")[0]));if(c&&!used.has(c.id)){used.add(c.id);return {id:c.id,byHref:true};}}
   const rem=unitCandidates.filter(c=>!used.has(c.id));
   const best=rem.map(c=>({c,s:improvedMatchScore(title,c)})).sort((a,b)=>b.s-a.s)[0];
-  if(best&&best.s>=0.6){used.add(best.c.id);return best.c.id;}
-  const f=unitCandidates[fb++];if(f&&!used.has(f.id)){used.add(f.id);return f.id;}
+  if(best&&best.s>=0.6){used.add(best.c.id);return {id:best.c.id,byHref:false};}
+  const f=unitCandidates[fb++];if(f&&!used.has(f.id)){used.add(f.id);return {id:f.id,byHref:false};}
   return null;
  };
  const defaultTitle=unit.volume.label||unit.title||`제${(unit.index??0)+1}권`;
@@ -2040,18 +2053,18 @@ function groupsFromUnitTree(unit,tree,unitCandidates){
   if(node.children&&node.children.length){
    const g={title:node.title||defaultTitle,chapters:[],coverFile:null,coverMode:"none",originalCoverHref:null};
    const leaves=[];for(const ch of node.children)collectLeaves(ch,leaves);
-   for(const lf of leaves){const id=resolve(lf.href,lf.title);if(id)g.chapters.push({title:lf.title,sourceId:id});}
+   for(const lf of leaves){const r=resolve(lf.href,lf.title);if(r)g.chapters.push({title:lf.title,sourceId:r.id,byOriginalToc:r.byHref});}
    if(g.chapters.length)groups.push(g);
   }else{
    if(!groups.length)groups.push({title:defaultTitle,chapters:[],coverFile:null,coverMode:"none",originalCoverHref:null});
-   const id=resolve(node.href,node.title);if(id)groups[groups.length-1].chapters.push({title:node.title,sourceId:id});
+   const r=resolve(node.href,node.title);if(r)groups[groups.length-1].chapters.push({title:node.title,sourceId:r.id,byOriginalToc:r.byHref});
   }
  }
  const leftover=unitCandidates.filter(c=>!used.has(c.id)).sort((a,b)=>(a.index??0)-(b.index??0));
  if(leftover.length){
   if(!groups.length)groups.push({title:defaultTitle,chapters:[],coverFile:null,coverMode:"none",originalCoverHref:null});
   const g=groups[groups.length-1];
-  for(const c of leftover){used.add(c.id);g.chapters.push({title:c.title,sourceId:c.id});}
+  for(const c of leftover){used.add(c.id);g.chapters.push({title:c.title,sourceId:c.id,byOriginalToc:true});}
  }
  return groups.filter(g=>g.chapters.length);
 }
@@ -2994,7 +3007,7 @@ function renderGroups(){
     scheduleAutosave();
    };
    tr.querySelector("input").onblur=()=>renderGroups();
-   tr.querySelector("select").onchange=e=>{ch.sourceId=e.target.value||null;renderGroups()};
+   tr.querySelector("select").onchange=e=>{ch.sourceId=e.target.value||null;ch.byOriginalToc=false;renderGroups()};
    tr.querySelector('[data-role="cup"]').onclick=()=>{if(ci>0){[g.chapters[ci-1],g.chapters[ci]]=[g.chapters[ci],g.chapters[ci-1]];renderGroups()}};
    tr.querySelector('[data-role="cdown"]').onclick=()=>{if(ci<g.chapters.length-1){[g.chapters[ci+1],g.chapters[ci]]=[g.chapters[ci],g.chapters[ci+1]];renderGroups()}};
    tr.querySelector('[data-role="moveGroupBtn"]').onclick=()=>{
