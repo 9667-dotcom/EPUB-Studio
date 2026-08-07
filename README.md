@@ -1,4 +1,4 @@
-# EPUB Studio Mobile v7.7.6
+# EPUB Studio Mobile v7.7.7
 
 TXT, EPUB, 여러 권의 EPUB/TXT를 하나의 EPUB으로 정리하는 **단일 HTML 파일 웹앱**입니다.
 `EPUB_Studio_Mobile_v7.7.3.html` 파일 하나를 브라우저에서 열어 사용할 수 있습니다.
