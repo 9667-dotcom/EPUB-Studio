@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>EPUB Studio Mobile v7.8.0</title>
+<title>EPUB Studio Mobile v7.8.2</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -79,7 +79,7 @@ window.addEventListener("unhandledrejection",function(e){
 </script>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v7.8.0</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본 · build 7.8.0</div></header>
+<header><h1>EPUB Studio Mobile v7.8.2</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본 · build 7.8.2</div></header>
 <main>
 
 <div id="buildMode">
@@ -139,6 +139,8 @@ window.addEventListener("unhandledrejection",function(e){
   <p class="small">우선순위: 원본 NAV/NCX → 붙여넣은 목차 → ZIP 내부 파일명 → 자동 추론</p>
 </div>
 <label class="section-toggle"><input id="enableTocWork" type="checkbox" checked> 목차·권 페이지 재구성 사용</label><div id="tocWorkBody">
+<label><input id="flatToc" type="checkbox"> 목차를 평평하게 (권 페이지 없이 화만 나열)</label>
+<div class="small">켜면 '본문' 같은 권 묶음 페이지를 만들지 않고, 표지·작품설명 다음에 1화·2화…를 같은 레벨로 쭉 나열합니다. 130화짜리 단일 연재본처럼 권이 없는 경우에 적합합니다.</div>
 <textarea id="tocText" placeholder="1권&#10;1화&#10;2화&#10;&#10;2권&#10;3화&#10;4화&#10;&#10;[권] 외전&#10;외전 1화"></textarea>
 <p class="small">
 <b>화 번호 범위로 자동 구성:</b> <code>1권: 1화 ~ 28화</code> 처럼 권마다 한 줄씩 적으면, 제목과 상관없이 본문을 번호 순서대로 각 권에 배정합니다. <code>[1]</code>처럼 번호가 권마다 반복돼도 중복 오류 없이 정확히 나뉩니다. (먼저 <b>원본 분석</b>으로 본문 후보를 만든 뒤 사용)
@@ -229,7 +231,7 @@ window.addEventListener("unhandledrejection",function(e){
 </section>
 
 <section id="preflightCard" class="card app-step">
-<h2>생성 전 검사</h2><p class="small">v7.8.0은 편집 화면과 생성 엔진이 동일한 프로젝트 구조를 사용합니다. 오류가 있으면 다운로드 대신 정확한 원인을 표시합니다.</p>
+<h2>생성 전 검사</h2><p class="small">v7.8.2은 편집 화면과 생성 엔진이 동일한 프로젝트 구조를 사용합니다. 오류가 있으면 다운로드 대신 정확한 원인을 표시합니다.</p>
 <div id="preflightReport" class="status">원본과 목차를 분석하면 검사 결과가 표시됩니다.</div>
 </section>
 
@@ -262,9 +264,9 @@ window.addEventListener("unhandledrejection",function(e){
 <div class="small">text-align: justify 선언만 text-align: left로 바꾸고 나머지 CSS는 그대로 유지합니다.</div>
 <label><input id="addParagraphGap" type="checkbox" checked> 문단 사이 간격 넣기 (문리더 등 호환)</label>
 <div class="small">원본 CSS는 그대로 두고, 각 본문 문단에 인라인 여백만 더해 문단 사이가 붙어 보이는 리더에서도 나뉘어 보이게 합니다. 메세지·댓글 등 특수 클래스 문단은 건드리지 않습니다.</div>
-<div class="small">문단 간격 <input id="paragraphGapEm" type="number" value="0.6" min="0" max="3" step="0.1" style="width:4.5em"> em · 첫 줄 들여쓰기 <input id="paragraphIndentEm" type="number" value="0" min="0" max="3" step="0.1" style="width:4.5em"> em (간격을 줄 땐 보통 들여쓰기 0을 권장)</div>
-<label><input id="keepStructureReadabilityOnly" type="checkbox"> 단일 EPUB: 원본 구조 그대로 (권·목차·표지 재구성 없이 가독성/정렬만)</label>
-<div class="small">권이 없는 단일 EPUB을 '본문(1권)'으로 묶지 않고, 원본 목차·구조를 그대로 둔 채 위에서 켠 정렬·문단 옵션만 적용합니다. 목차 배정 없이 바로 생성할 수 있습니다.</div>
+<div class="small">문단 간격 <input id="paragraphGapEm" type="number" value="0.5" min="0" max="3" step="0.1" style="width:4.5em"> em · 첫 줄 들여쓰기 <input id="paragraphIndentEm" type="number" value="0.5" min="0" max="3" step="0.1" style="width:4.5em"> em (전자책 표준값 기준 기본 간격 0.5em·들여쓰기 0.5em, 필요시 조절 가능)</div>
+<label><input id="keepStructureReadabilityOnly" type="checkbox"> 원본 그대로 두고 가독성/정렬만 적용 (목차·구조 변경 없음)</label>
+<div class="small">이 EPUB의 목차·순서·표지·구조를 <b>전혀 바꾸지 않고</b>, 위에서 켠 정렬·문단 간격·가독성 옵션만 적용해 그대로 다시 저장합니다. 목차 배정이나 권 나누기 같은 과정 없이 바로 생성됩니다. (여러 EPUB을 하나로 합치는 '합본'과는 다른, 파일 하나를 손질만 하는 모드입니다.)</div>
 <label class="section-toggle"><input id="enableReadabilityWork" type="checkbox"> 긴 문단 가독성 개선 실행</label>
 <div id="readabilityWorkBody">
 <div class="small">CSS와 XHTML에서 justify 정렬만 left로 바꿉니다. 다른 CSS 파일·선언·경로·내용은 그대로 유지합니다.</div>
@@ -329,7 +331,7 @@ XML·manifest·spine·내부 링크·ZIP 검사는 항상 실행되며, 실패�
 
 <section class="card">
 <h2>처리 상태</h2>
-<div id="status" class="status">v7.8.0 준비됨. 원본 파일을 선택하세요.</div>
+<div id="status" class="status">v7.8.2 준비됨. 원본 파일을 선택하세요.</div>
 <div id="result"></div>
 </section>
 
@@ -361,7 +363,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 </script>
 <script>
 "use strict";
-const APP_VERSION="7.8.0";
+const APP_VERSION="7.8.2";
 const $=id=>document.getElementById(id);
 let state={inputType:null,zip:null,originalBytes:null,opfPath:"",opfDir:"",opfDoc:null,manifest:new Map(),spine:[],candidates:[],groups:[],title:"",creator:"",navHref:null,ncxHref:null,txtFiles:[],coverCandidates:[],sourceCoverByGroup:new Map(),manualGrouping:false,epubUnits:[]};
 
@@ -3684,8 +3686,8 @@ async function buildEpubCollection(){
  }
  // 문단 사이 간격 넣기(원본 CSS 미변경, 각 본문 문단에 인라인 여백만 추가)
  if($("addParagraphGap")?.checked){
-  const gapEm=$("paragraphGapEm")?.value??"0.6";
-  const indEm=$("paragraphIndentEm")?.value??"0";
+  const gapEm=$("paragraphGapEm")?.value??"0.5";
+  const indEm=$("paragraphIndentEm")?.value??"0.5";
   const seenG=new Set();
   for(const g of state.groups)for(const ch of g.chapters){
    const c=state.candidates.find(x=>x.id===ch.sourceId);
@@ -3737,7 +3739,7 @@ async function buildSingleEpubReadabilityOnly(){
  }
  // 3) 문단 사이 간격(본문 문단에만, 메세지/댓글 등 특수 클래스는 보호)
  if($("addParagraphGap")?.checked){
-  const gapEm=$("paragraphGapEm")?.value??"0.6",indEm=$("paragraphIndentEm")?.value??"0";
+  const gapEm=$("paragraphGapEm")?.value??"0.5",indEm=$("paragraphIndentEm")?.value??"0.5";
   for(const full of bodyPaths){
    try{const old=await zip.file(full)?.async("text");if(!old)continue;const nw=addParagraphGaps(old,gapEm,indEm);if(nw!==old){zip.file(full,nw);gapChanged++}}catch(e){}
   }
@@ -3800,12 +3802,15 @@ body:not(.hm-cover-page):not(.hm-title):not(.hm-desc){line-height:1.8;word-break
  }
  assertFrontMatterOrder(spine,coverPageId,descriptionPageId,"TXT EPUB");
  const byId=new Map(state.candidates.map(x=>[x.id,x]));let vi=0,ci=0;
+ const flatToc=$("flatToc")?.checked;
  for(const g of state.groups){
   vi++;const vn=String(vi).padStart(3,"0"),vh=`Text/volume_${vn}.xhtml`;let vbody;
-  if($("enableCoverWork").checked&&g.coverMode==="new"&&g.coverFile){const ext=extOf(g.coverFile),ih=`Images/volume_${vn}.${ext}`;zip.file("OEBPS/"+ih,await g.coverFile.arrayBuffer());add("vol_img_"+vn,ih,mediaType(ih));vbody=`<div class="cover-page"><img src="../${ih}" alt="${esc(g.title)}"/></div>`}
-  else vbody=`<div class="title-page"><h1>${esc(g.title)}</h1></div>`;
-  zip.file("OEBPS/"+vh,makeXhtml(g.title,vbody,"../Styles/book.css"));add("vol_"+vn,vh,"application/xhtml+xml");spine.push("vol_"+vn);
   const ng={title:g.title,href:vh,chapters:[]};
+  if(!flatToc){
+   if($("enableCoverWork").checked&&g.coverMode==="new"&&g.coverFile){const ext=extOf(g.coverFile),ih=`Images/volume_${vn}.${ext}`;zip.file("OEBPS/"+ih,await g.coverFile.arrayBuffer());add("vol_img_"+vn,ih,mediaType(ih));vbody=`<div class="cover-page"><img src="../${ih}" alt="${esc(g.title)}"/></div>`}
+   else vbody=`<div class="title-page"><h1>${esc(g.title)}</h1></div>`;
+   zip.file("OEBPS/"+vh,makeXhtml(g.title,vbody,"../Styles/book.css"));add("vol_"+vn,vh,"application/xhtml+xml");spine.push("vol_"+vn);
+  }
   for(const ch of g.chapters){
    if(!ch.sourceId)continue;const src=byId.get(ch.sourceId);if(!src)continue;ci++;
    const cn=String(ci).padStart(5,"0"),href=`Text/chapter_${cn}.xhtml`;
@@ -3818,13 +3823,17 @@ body:not(.hm-cover-page):not(.hm-title):not(.hm-desc){line-height:1.8;word-break
   const used=new Set(assigned);
   for(const src of state.candidates)if(!used.has(src.id)){ci++;const cn=String(ci).padStart(5,"0"),href=`Text/chapter_${cn}.xhtml`;zip.file("OEBPS/"+href,makeXhtml(src.title,`<h1 class="chapter-title">${esc(src.title)}</h1>${txtBodyHtml(src.content)}`,"../Styles/book.css"));add("ch_"+cn,href,"application/xhtml+xml");spine.push("ch_"+cn)}
  }
- let navOl=navGroups.map(g=>`<li><a href="${esc(g.href)}">${esc(g.title)}</a><ol>${g.chapters.map(c=>`<li><a href="${esc(c.href)}">${esc(c.title)}</a></li>`).join("")}</ol></li>`).join("");
+ let navOl=flatToc
+  ? navGroups.flatMap(g=>g.chapters).map(c=>`<li><a href="${esc(c.href)}">${esc(c.title)}</a></li>`).join("")
+  : navGroups.map(g=>`<li><a href="${esc(g.href)}">${esc(g.title)}</a><ol>${g.chapters.map(c=>`<li><a href="${esc(c.href)}">${esc(c.title)}</a></li>`).join("")}</ol></li>`).join("");
  zip.file("OEBPS/nav.xhtml",`<?xml version="1.0" encoding="utf-8"?><!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>목차</title></head><body><nav epub:type="toc" id="toc"><h1>목차</h1><ol>${navOl}</ol></nav>
 
 </body></html>`);add("nav","nav.xhtml","application/xhtml+xml","nav");
- let po=0;const points=navGroups.map((g,gi)=>{po++;const p=po,kids=g.chapters.map((c,ci2)=>{po++;return `<navPoint id="ch_${gi}_${ci2}" playOrder="${po}"><navLabel><text>${esc(c.title)}</text></navLabel><content src="${esc(c.href)}"/></navPoint>`}).join("");return `<navPoint id="vol_${gi}" playOrder="${p}"><navLabel><text>${esc(g.title)}</text></navLabel><content src="${esc(g.href)}"/>${kids}</navPoint>`}).join("");
+ let po=0;const points=flatToc
+  ? navGroups.flatMap(g=>g.chapters).map((c,i)=>{po++;return `<navPoint id="ch_${i}" playOrder="${po}"><navLabel><text>${esc(c.title)}</text></navLabel><content src="${esc(c.href)}"/></navPoint>`}).join("")
+  : navGroups.map((g,gi)=>{po++;const p=po,kids=g.chapters.map((c,ci2)=>{po++;return `<navPoint id="ch_${gi}_${ci2}" playOrder="${po}"><navLabel><text>${esc(c.title)}</text></navLabel><content src="${esc(c.href)}"/></navPoint>`}).join("");return `<navPoint id="vol_${gi}" playOrder="${p}"><navLabel><text>${esc(g.title)}</text></navLabel><content src="${esc(g.href)}"/>${kids}</navPoint>`}).join("");
  const uid="urn:uuid:"+makeUuid();
- zip.file("OEBPS/toc.ncx",`<?xml version="1.0" encoding="utf-8"?><ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><head><meta name="dtb:uid" content="${uid}"/><meta name="dtb:depth" content="2"/><meta name="dtb:totalPageCount" content="0"/><meta name="dtb:maxPageNumber" content="0"/></head><docTitle><text>${esc(title)}</text></docTitle><navMap>${points}</navMap></ncx>`);add("ncx","toc.ncx","application/x-dtbncx+xml");
+ zip.file("OEBPS/toc.ncx",`<?xml version="1.0" encoding="utf-8"?><ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><head><meta name="dtb:uid" content="${uid}"/><meta name="dtb:depth" content="${flatToc?1:2}"/><meta name="dtb:totalPageCount" content="0"/><meta name="dtb:maxPageNumber" content="0"/></head><docTitle><text>${esc(title)}</text></docTitle><navMap>${points}</navMap></ncx>`);add("ncx","toc.ncx","application/x-dtbncx+xml");
  const now=new Date().toISOString().replace(/\.\d{3}Z$/,"Z");
  const manifestXml=manifest.map(x=>`<item id="${x.id}" href="${esc(x.href)}" media-type="${x.media}"${x.props?` properties="${x.props}"`:""}/>`).join("");
  const spineXml=spine.map(id=>`<itemref idref="${id}"/>`).join("");
@@ -3940,7 +3949,7 @@ $("buildBtn").onclick=async()=>{
   assertFrontMatterOrder(newSpine,newCoverPageId,newDescriptionPageId,"단일 EPUB");
 
   // 권 페이지와 본문
-  const navGroups=[]; let vi=0;
+  const navGroups=[]; let vi=0; const flatToc=$("flatToc")?.checked;
   for(const g of state.groups){
    vi++; const no=String(vi).padStart(3,"0"),pageHref=base+`hm_volume_${no}.xhtml`;let body="";
    let selectedCover=null;
@@ -3949,14 +3958,16 @@ $("buildBtn").onclick=async()=>{
    }else if($("enableCoverWork").checked&&g.coverMode==="original"){
     selectedCover=await resolveOriginalCoverForGroup(g,zip);
    }
-   if(selectedCover){
-    const ext=selectedCover.ext==="jpeg"?"jpg":selectedCover.ext,imgHref=base+`hm_volume_${no}.${ext}`;
-    zip.file(join(state.opfDir,imgHref),selectedCover.bytes);addManifestItem(opf,manifestEl,uniqueId(opf,"hm_vol_img_"+no),imgHref,mediaType(imgHref));
-    body=`<div class="hm-cover"><img src="${esc(imgHref.split("/").pop())}" alt="${esc(g.title)}"/></div>`;
-   }else body=`<h1>${esc(g.title)}</h1>`;
-   zip.file(join(state.opfDir,pageHref),makeXhtml(g.title,body,"hm_builder.css",selectedCover?"hm-cover-page":"hm-title"));
-   const pageId=uniqueId(opf,"hm_volume_"+no);addManifestItem(opf,manifestEl,pageId,pageHref,"application/xhtml+xml");newSpine.push(pageId);
    const navG={title:g.title,href:pageHref,chapters:[]};
+   if(!flatToc){
+    if(selectedCover){
+     const ext=selectedCover.ext==="jpeg"?"jpg":selectedCover.ext,imgHref=base+`hm_volume_${no}.${ext}`;
+     zip.file(join(state.opfDir,imgHref),selectedCover.bytes);addManifestItem(opf,manifestEl,uniqueId(opf,"hm_vol_img_"+no),imgHref,mediaType(imgHref));
+     body=`<div class="hm-cover"><img src="${esc(imgHref.split("/").pop())}" alt="${esc(g.title)}"/></div>`;
+    }else body=`<h1>${esc(g.title)}</h1>`;
+    zip.file(join(state.opfDir,pageHref),makeXhtml(g.title,body,"hm_builder.css",selectedCover?"hm-cover-page":"hm-title"));
+    const pageId=uniqueId(opf,"hm_volume_"+no);addManifestItem(opf,manifestEl,pageId,pageHref,"application/xhtml+xml");newSpine.push(pageId);
+   }
    for(const ch of g.chapters){
     if(!ch.sourceId)continue;const it=state.manifest.get(ch.sourceId);if(!it)continue;
     newSpine.push(ch.sourceId);navG.chapters.push({title:ch.title,href:it.href});
@@ -3972,7 +3983,9 @@ $("buildBtn").onclick=async()=>{
   for(const it of children(manifestEl,"item"))if((it.getAttribute("properties")||"").split(/\s+/).includes("nav")){navId=it.getAttribute("id");navHref=it.getAttribute("href")}
   if(!navId){navId=uniqueId(opf,"hm_nav");addManifestItem(opf,manifestEl,navId,navHref,"application/xhtml+xml","nav")}
   const navFile=join(state.opfDir,navHref);
-  let navOl=navGroups.map(g=>`<li><a href="${esc(relative(navFile,join(state.opfDir,g.href)))}">${esc(g.title)}</a><ol>${g.chapters.map(c=>`<li><a href="${esc(relative(navFile,join(state.opfDir,c.href)))}">${esc(c.title)}</a></li>`).join("")}</ol></li>`).join("");
+  let navOl=flatToc
+   ? navGroups.flatMap(g=>g.chapters).map(c=>`<li><a href="${esc(relative(navFile,join(state.opfDir,c.href)))}">${esc(c.title)}</a></li>`).join("")
+   : navGroups.map(g=>`<li><a href="${esc(relative(navFile,join(state.opfDir,g.href)))}">${esc(g.title)}</a><ol>${g.chapters.map(c=>`<li><a href="${esc(relative(navFile,join(state.opfDir,c.href)))}">${esc(c.title)}</a></li>`).join("")}</ol></li>`).join("");
   const navXml=`<?xml version="1.0" encoding="utf-8"?><!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>목차</title></head><body><nav epub:type="toc" id="toc"><h1>목차</h1><ol>${navOl}</ol></nav>
 
 </body></html>`;
@@ -3983,9 +3996,11 @@ $("buildBtn").onclick=async()=>{
   for(const it of children(manifestEl,"item"))if(it.getAttribute("media-type")==="application/x-dtbncx+xml"){ncxId=it.getAttribute("id");ncxHref=it.getAttribute("href")}
   if(!ncxId){ncxId=uniqueId(opf,"hm_ncx");addManifestItem(opf,manifestEl,ncxId,ncxHref,"application/x-dtbncx+xml")}
   const ncxFile=join(state.opfDir,ncxHref);let po=0;
-  const ncxPoints=navGroups.map((g,gi)=>{po++;const p=po;const kids=g.chapters.map((c,ci)=>{po++;return `<navPoint id="ch_${gi}_${ci}" playOrder="${po}"><navLabel><text>${esc(c.title)}</text></navLabel><content src="${esc(relative(ncxFile,join(state.opfDir,c.href)))}"/></navPoint>`}).join("");return `<navPoint id="vol_${gi}" playOrder="${p}"><navLabel><text>${esc(g.title)}</text></navLabel><content src="${esc(relative(ncxFile,join(state.opfDir,g.href)))}"/>${kids}</navPoint>`}).join("");
+  const ncxPoints=flatToc
+   ? navGroups.flatMap(g=>g.chapters).map((c,i)=>{po++;return `<navPoint id="ch_${i}" playOrder="${po}"><navLabel><text>${esc(c.title)}</text></navLabel><content src="${esc(relative(ncxFile,join(state.opfDir,c.href)))}"/></navPoint>`}).join("")
+   : navGroups.map((g,gi)=>{po++;const p=po;const kids=g.chapters.map((c,ci)=>{po++;return `<navPoint id="ch_${gi}_${ci}" playOrder="${po}"><navLabel><text>${esc(c.title)}</text></navLabel><content src="${esc(relative(ncxFile,join(state.opfDir,c.href)))}"/></navPoint>`}).join("");return `<navPoint id="vol_${gi}" playOrder="${p}"><navLabel><text>${esc(g.title)}</text></navLabel><content src="${esc(relative(ncxFile,join(state.opfDir,g.href)))}"/>${kids}</navPoint>`}).join("");
   const uid=(descendants(metadataEl,"identifier")[0]?.textContent||"hm-builder").trim();
-  const ncxXml=`<?xml version="1.0" encoding="utf-8"?><ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><head><meta name="dtb:uid" content="${esc(uid)}"/><meta name="dtb:depth" content="2"/><meta name="dtb:totalPageCount" content="0"/><meta name="dtb:maxPageNumber" content="0"/></head><docTitle><text>${esc(state.title)}</text></docTitle><navMap>${ncxPoints}</navMap></ncx>`;
+  const ncxXml=`<?xml version="1.0" encoding="utf-8"?><ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><head><meta name="dtb:uid" content="${esc(uid)}"/><meta name="dtb:depth" content="${flatToc?1:2}"/><meta name="dtb:totalPageCount" content="0"/><meta name="dtb:maxPageNumber" content="0"/></head><docTitle><text>${esc(state.title)}</text></docTitle><navMap>${ncxPoints}</navMap></ncx>`;
   zip.file(ncxFile,ncxXml);
 
   // spine 재작성
@@ -4034,7 +4049,7 @@ $("buildBtn").onclick=async()=>{
 
   // 문단 사이 간격 넣기(원본 CSS 미변경, 각 본문 문단에 인라인 여백만 추가) — 단일 EPUB에도 적용
   if($("addParagraphGap")?.checked){
-    const gapEm=$("paragraphGapEm")?.value??"0.6",indEm=$("paragraphIndentEm")?.value??"0";
+    const gapEm=$("paragraphGapEm")?.value??"0.5",indEm=$("paragraphIndentEm")?.value??"0.5";
     const usedIds=[...new Set(state.groups.flatMap(g=>g.chapters.map(c=>c.sourceId).filter(Boolean)))];
     for(const id of usedIds){
       const it=state.manifest.get(id);if(!it||!/xhtml|html/.test(it.media||""))continue;
@@ -4071,8 +4086,8 @@ $("buildBtn").onclick=async()=>{
 // (문단 CSS가 margin:0 인 EPUB이 문리더 등에서 문단이 붙어 보이는 문제 대응.)
 // 빈 간격 문단과 이미 인라인 margin이 있는 문단은 건드리지 않는다. <p> 외 다른 요소는 전혀 손대지 않는다.
 function addParagraphGaps(html,gap,indent){
- const g=(gap==null?"0.6":gap)+"em";
- const ind=(indent==null?"0":indent)+"em";
+ const g=(gap==null?"0.5":gap)+"em";
+ const ind=(indent==null?"0.5":indent)+"em";
  const src=String(html||"");
  const re=/<p\b([^>]*)>([\s\S]*?)<\/p>/gi;
  // 메세지·댓글·채팅 등 특수 스타일 문단은 절대 건드리지 않는다(클래스명으로 보호).
@@ -4310,6 +4325,14 @@ function bindStepNavigation(){
  document.querySelectorAll(".mobile-toolbar [data-target]").forEach(btn=>{
   btn.addEventListener("click",()=>scrollToAppStep(btn.dataset.target,btn));
  });
+ const resetBtn=document.getElementById("mobileResetNav");
+ if(resetBtn)resetBtn.addEventListener("click",()=>{
+  // '예'(확인) → 자동저장까지 지우고 새로고침해 완전히 처음 상태로. '아니오'(취소) → 그대로 유지.
+  if(!confirm("입력값을 모두 삭제하겠습니까?\n불러온 파일·목차·편집 내용이 전부 초기화되어 처음 화면으로 돌아갑니다."))return;
+  try{localStorage.removeItem("epubStudioV3Autosave")}catch(e){}
+  try{window.scrollTo(0,0)}catch(e){}
+  location.reload();
+ });
  const steps=[...document.querySelectorAll(".app-step")];
  if("IntersectionObserver" in window){
   const observer=new IntersectionObserver(entries=>{
@@ -4371,6 +4394,7 @@ $("resetBtn").onclick=()=>location.reload();
   </div>
 </div>
 <nav class="mobile-toolbar" aria-label="단계 이동">
+  <button id="mobileResetNav" type="button" class="secondary" title="입력값 모두 삭제">↺ 리셋</button>
   <button id="mobileOriginalNav" type="button" class="light" data-target="stepOriginal">1. 원본</button>
   <button id="mobileCoverNav" type="button" class="light" data-target="stepCover">2. 표지</button>
   <button id="mobileDescriptionNav" type="button" class="light" data-target="stepDescription">3. 설명</button>
