@@ -730,7 +730,7 @@ function titleFromXhtml(text,href){
 function isLikelyNonBody(item,title,index,text="",removeAds=true){
  const head=(String(item?.href||"")+" "+String(title||"")).toLowerCase();
  // 표지/내부 목차처럼 구조적으로 본문이 아닌 항목은 정리 옵션과 무관하게 제외한다.
- if(/(?:nav|toc|목차)/i.test(head))return true;
+ if(/(?:nav|toc|목차|차례)/i.test(head))return true;
  if(index===0&&/cover|표지|titlepage/i.test(head))return true;
  // 판권·광고·구매 안내·미리보기류는 사용자가 제거 옵션을 켠 경우에만 제외한다.
  if(!removeAds)return false;
@@ -1699,7 +1699,7 @@ function candidateBodyScore(lines,index,title,tocRange,previousIndex,nextTitle){
   if(nextOcc.length)score+=10;
  }
  const before=lines.slice(Math.max(0,index-4),index).map(x=>x.trim()).filter(Boolean);
- if(before.some(x=>/^(?:목차|contents?)$/i.test(x)))score-=50;
+ if(before.some(x=>isTocHeaderLine(x)))score-=50;
  if(before.some(x=>/^(?:지은이|저자|펴낸곳|출판사|발행|isbn)\s*[:：]/i.test(x)))score-=20;
  return score;
 }
@@ -1716,7 +1716,7 @@ function chooseBestHeadingOccurrence(lines,title,startIndex,tocRange,nextTitle=n
 }
 
 function detectInternalTocRange(lines){
- const tocStart=lines.findIndex(x=>/^\s*(?:목차|contents?)\s*$/i.test(x));
+ const tocStart=lines.findIndex(isTocHeaderLine);
  if(tocStart<0)return null;
 
  let tocEnd=Math.min(lines.length,tocStart+120);
@@ -1926,24 +1926,42 @@ function rebuildTxtCandidatesFromPastedGroups(groups){
  return {groups:rebuiltGroups,matched,unmatched};
 }
 
+// 내부 목차 헤더 줄 판정. '목차'뿐 아니라 '차례'·'목 차'·'차 례'·contents 등도 인식한다.
+function isTocHeaderLine(s){
+ return /^\s*(?:목\s*차|차\s*례|contents?|table\s+of\s+contents)\s*$/i.test(String(s||"").trim());
+}
+// 내부 목차 영역에서 '목차 항목처럼 보이는 줄'만 고른다.
+// 워터마크(TNT@… 등)·본문 산문을 항목으로 오인해 빈 화·가짜 화가 생기는 것을 막는다.
+function looksLikeTocEntry(line){
+ const s=String(line||"").normalize("NFKC").trim();
+ if(!s||s.length>60)return false;
+ if(/@/.test(s))return false;                                  // 워터마크류
+ if(/[.!?…。？！]$/.test(s)&&s.length>16)return false;          // 긴 산문 문장
+ if(/^(?:\d+\s*[.．)\]]|\(?\d+\)|\[\s*\d+\s*\]|#\s*\d+|제?\s*\d+\s*[화장부권부화]|chapter\s*\d+|episode\s*\d+|part\s*\d+|프롤로그|에필로그|외전|번외편?|후기|후일담|서장|종장|막간|서막|prologue|epilogue)\b/i.test(s))return true;
+ // 번호 없는 짧은 제목(문장부호로 끝나지 않는 한 줄)
+ if(s.length<=40&&!/[.!?…。？！,、]$/.test(s))return true;
+ return false;
+}
 function extractEmbeddedToc(text,fileName){
  const lines=normalizeTxt(text).split("\n");
- const tocIndex=lines.findIndex(x=>/^\s*(?:목차|contents?)\s*$/i.test(x));
+ const tocIndex=lines.findIndex(isTocHeaderLine);
  if(tocIndex<0)return null;
  const titles=[];let bodySearchStart=-1;
- for(let i=tocIndex+1;i<Math.min(lines.length,tocIndex+120);i++){
-  const title=lines[i].trim();
-  if(!title)continue;
-  const key=normalizeEmbeddedHeading(title);
+ for(let i=tocIndex+1;i<Math.min(lines.length,tocIndex+200);i++){
+  const raw=lines[i].trim();
+  if(!raw)continue;
+  const key=normalizeEmbeddedHeading(raw);
   if(!key)continue;
-  if(titles.some(x=>normalizeEmbeddedHeading(x.title)===key)){
+  // 이미 모은 목차 제목이 '제목처럼' 다시 나오면 그 지점이 실제 본문 시작이다.
+  if(looksLikeTocEntry(raw)&&titles.some(x=>normalizeEmbeddedHeading(x.title)===key)){
    bodySearchStart=i;break;
   }
-  if(/^(?:지은이|펴낸곳|출판|저작권|copyright|isbn)\s*[:：]/i.test(title))continue;
-  if(title.length>140)break;
-  titles.push({title,lineIndex:i});
+  if(/^(?:지은이|펴낸곳|출판|저작권|copyright|isbn)\s*[:：]/i.test(raw))continue;
+  // 목차 항목이 아닌 줄(워터마크·산문)은 건너뛴다.
+  if(!looksLikeTocEntry(raw))continue;
+  titles.push({title:raw,lineIndex:i});
  }
- if(titles.length<2||bodySearchStart<0)return null;
+ if(titles.length<1||bodySearchStart<0)return null;
  const bodyMarkers=[];let cursor=bodySearchStart;
  for(const tocItem of titles){
   const wanted=normalizeEmbeddedHeading(tocItem.title);
@@ -1963,7 +1981,7 @@ function extractEmbeddedToc(text,fileName){
   });
   cursor=found+1;
  }
- return bodyMarkers.length>=2?{titles,markers:bodyMarkers,tocIndex,bodySearchStart}:null;
+ return bodyMarkers.length>=1?{titles,markers:bodyMarkers,tocIndex,bodySearchStart}:null;
 }
 
 function scanTxtMarkers(text,fileName){
