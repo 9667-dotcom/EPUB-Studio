@@ -808,7 +808,15 @@ function matchLabel(ch){
 
 function isIgnorableTocEntryTitle(title){
  const s=String(title||"").normalize("NFKC").trim();
- return /^(?:표지|cover|title\s*page|목차|toc|table\s+of\s+contents|판권|copyright|colophon|광고|advert(?:isement)?|구매\s*안내|서점\s*안내|도서\s*안내|미리보기|preview|체험판)$/i.test(s);
+ if(!s)return false;
+ // 1) 제목 전체가 부가 페이지 이름인 경우(겉/속/앞/뒤표지, 표제지, 차례, 판권, 일러스트, 화보, 면지 등)
+ if(/^(?:겉?표지|속표지|앞표지|뒤표지|표제(?:지)?|반?표지|title\s*page|titlepage|목차|차례|toc|table\s+of\s+contents|판권(?:지)?|간기|콜로폰|colophon|copyright|저작권|광고|advert(?:isement)?|구매\s*안내|서점\s*안내|도서\s*안내|출판\s*안내|미리보기|맛보기|체험판|preview|일러스트(?:레이션)?|illust(?:ration)?|화보|삽화|면지|간지|속지)$/i.test(s))return true;
+ // 2) 제목 안에 부가 페이지 키워드가 '단어'로 포함된 경우("○○ 표지", "cover image" 등)
+ //    한글 합성어 오탐 방지: '표지판'·'출판권'처럼 뒤/앞에 다른 한글이 붙으면 제외.
+ if(/(?:titlepage|colophon|copyright|front\s*cover|back\s*cover)/i.test(s))return true;
+ if(/(?:^|[^가-힣])(?:표지|판권|콜로폰|간기)(?:$|[^가-힣])/.test(s))return true;
+ if(/(?:^|[\s_\-])cover([\s_\-]|$)/i.test(s))return true;
+ return false;
 }
 function candidateIsNonBodyExtra(c){
  if(!c)return false;
@@ -822,8 +830,60 @@ function candidateIsNonBodyExtra(c){
  }catch(e){}
  return false;
 }
+// 붙여넣은/원본 목차의 한 줄이, 후보에서 이미 제외된 '본문 없는 부가 페이지'(표지·내부목차·판권 등)를
+// 가리키는지 확인한다. 이런 항목은 배정할 실제 본문이 없으므로 미배정이어도 생성 차단 대상이 아니다.
+function tocEntryMatchesExcludedFrontPage(title){
+ const t=normalizeEmbeddedHeading(title);
+ if(!t)return false;
+ const scan=list=>{
+  for(const s of (list||[])){
+   if(s.autoInclude===true)continue;            // 후보로 포함된 것은 제외 대상 아님
+   const st=s.title||"", sh=s.href||s.fullPath||"", sc=s.content||"";
+   if(normalizeEmbeddedHeading(st)===t)return true;
+   if(candidateIsNonBodyExtra({title:st,href:sh,content:sc,index:s.spineIndex||s.index||0})){
+    if(normalizeEmbeddedHeading(st)===t||similarity(title,st)>=0.7)return true;
+   }
+  }
+  return false;
+ };
+ // EPUB 합본: 각 권의 분류된 섹션 중 제외된 부가 페이지
+ for(const u of (state.epubUnits||[])){ if(scan(u.sections))return true; }
+ // 단일 EPUB: 후보에서 빠진 부가 페이지 목록
+ if(scan((state.cleanupRemoved||[]).map(x=>({...x,autoInclude:false}))))return true;
+ return false;
+}
 function chapterIsIgnorableUnassigned(ch){
- return !ch?.sourceId&&isIgnorableTocEntryTitle(ch?.title);
+ if(ch?.sourceId)return false;
+ if(isIgnorableTocEntryTitle(ch?.title))return true;
+ if(tocEntryMatchesExcludedFrontPage(ch?.title))return true;
+ return false;
+}
+
+// ── 본문 우선 매칭 헬퍼 ─────────────────────────────────────────────
+// 같은 제목이 '내부 목차 페이지'와 '실제 본문'에 모두 있을 때,
+// 링크·제목만 있는 목차/부가 페이지가 선택돼 '내용 없음'이 되는 것을 막는다.
+function candidateVisibleBodyLen(c){
+ if(!c)return 0;
+ return String(c.content||c.text||"")
+  .replace(/<script[\s\S]*?<\/script>/gi," ")
+  .replace(/<style[\s\S]*?<\/style>/gi," ")
+  .replace(/<[^>]+>/g," ")
+  .replace(/&nbsp;|&#160;/gi," ")
+  .replace(/\s+/g," ").trim().length;
+}
+function candidateLooksTocOrBodyless(c){
+ if(!c)return true;
+ try{ if(isTocLikeXhtml(c.content))return true; }catch(e){}
+ // xhtml인데 실제로 보이는 본문이 거의 없으면(링크/제목뿐) 목차·부가 페이지로 본다.
+ if(/xhtml|html/i.test(c.media||"")&&candidateVisibleBodyLen(c)<12)return true;
+ return false;
+}
+// 제목 유사도는 유지하되, 목차/부가 페이지에는 감점을 줘서
+// 실제 본문 후보가 있으면 항상 본문이 우선 선택되도록 한다.
+function bodyPreferringScore(title,c){
+ const s=improvedMatchScore(title,c);
+ if(s>0&&candidateLooksTocOrBodyless(c))return Math.max(0,s-0.5);
+ return s;
 }
 
 function mappingStats(){
@@ -1012,13 +1072,19 @@ function autoExpandEmbeddedCollectionCandidates(candidates){
  const out=[];let splitCount=0;
  for(const list of byUnit.values()){
   if(list.length!==1||list[0].sourceKind!=="epub"||!list[0].content){out.push(...list);continue;}
-  const c=list[0],heads=autoEmbeddedHeadingsForCandidate(c);if(!heads.length){out.push(c);continue;}
+  const c=list[0];
+  if(candidateLooksTocOrBodyless(c)){out.push(c);continue;} // 목차·부가 페이지는 화로 쪼개지 않는다
+  const heads=autoEmbeddedHeadingsForCandidate(c);if(!heads.length){out.push(c);continue;}
   heads.forEach((h,i)=>{const fragmentId=`hm_auto_${String(c.id).replace(/[^A-Za-z0-9_.-]/g,"_")}_${i+1}`;out.push({...c,id:`${c.id}__auto_${i+1}`,href:`${c.href}#${fragmentId}`,baseHref:c.href.split("#")[0],fragmentId,fragmentText:h.text,title:h.text,index:(c.index??0)+(i+1)/1000,sourceKind:"epub-fragment",parentId:c.id,detectedBy:"embedded-auto"});splitCount++;});
  }
  out.sort((a,b)=>(a.index??0)-(b.index??0));out.forEach((c,i)=>c.index=i);return {candidates:out,splitCount};
 }
 function findEmbeddedRequestedHeadingsInXhtml(xhtml,requestedTitles){
- const found=[];const re=/<(h[1-6]|p|div|section)(\b[^>]*)>([\s\S]*?)<\/\1>/gi;let m;
+ const found=[];
+ // 내부 목차 페이지는 화 제목들이 링크로 나열돼 있어 모든 제목이 '조각'으로 잡힌다.
+ // 이런 페이지를 본문처럼 쪼개면 실제 본문 대신 목차를 잡아 '내용 없음'이 되므로 건너뛴다.
+ try{ if(isTocLikeXhtml(xhtml))return found; }catch(e){}
+ const re=/<(h[1-6]|p|div|section)(\b[^>]*)>([\s\S]*?)<\/\1>/gi;let m;
  while((m=re.exec(String(xhtml||"")))){const text=embeddedBlockText(m[3]);if(!text||text.length>120)continue;const requested=(requestedTitles||[]).find(t=>titleMatchesLoose(text,t)||supplementalTitleAliasMatch(text,t));if(requested)found.push({text,requestedTitle:requested,offset:m.index});}
  return found;
 }
@@ -2407,9 +2473,9 @@ $("analyzeBtn").onclick=async()=>{
   const removeAds=$("removeCopyrightAds")?.checked!==false;
   const htmlSpine=spine.filter(it=>/xhtml|html/.test(it.media||""));
   const singleImagePages=htmlSpine.filter(it=>looksLikeImageOnlyXhtml(it.xhtmlText));
-  const candidates=htmlSpine.filter((it,i)=>!isLikelyNonBody(it,it.title,i,it.xhtmlText,removeAds));
+  const candidates=htmlSpine.filter((it,i)=>!isLikelyNonBody(it,it.title,i,it.xhtmlText,removeAds)&&!isTocLikeXhtml(it.xhtmlText));
   const candidateIds=new Set(candidates.map(x=>x.id));
-  const singleRemoved=htmlSpine.filter(x=>!candidateIds.has(x.id)).map(x=>({title:x.title,href:x.href,reason:/cover|표지|titlepage/i.test(String(x.href||"")+" "+String(x.title||""))?"표지":"내부 목차 또는 판권·광고·부가 페이지"}));
+  const singleRemoved=htmlSpine.filter(x=>!candidateIds.has(x.id)).map(x=>({title:x.title,href:x.href,content:x.xhtmlText,autoInclude:false,reason:/cover|표지|titlepage/i.test(String(x.href||"")+" "+String(x.title||""))?"표지":(isTocLikeXhtml(x.xhtmlText)?"내부 목차 페이지":"판권·광고·부가 페이지")}));
   const metadata=firstDesc(opf,"metadata"); const titleEl=metadata&&descendants(metadata,"title")[0],creatorEl=metadata&&descendants(metadata,"creator")[0];
   const title=titleEl?.textContent?.trim()||f.name.replace(/\.epub$/i,""),creator=creatorEl?.textContent?.trim()||"";
   state={inputType:"epub",zip,originalBytes:bytes,opfPath,opfDir,opfDoc:opf,manifest,spine,candidates,groups:[],title,creator,navHref:null,ncxHref:null,txtFiles:[],coverCandidates:[],sourceCoverByGroup:new Map(),manualGrouping:false,epubUnits:[],singleImagePages,cleanupRemoved:singleRemoved,dedupRemoved:[]};
@@ -2468,7 +2534,7 @@ function groupsFromOriginalTree(tree){
    const direct=state.candidates.find(c=>normalizePath(c.href)===rel||normalizePath(join(state.opfDir,c.href))===normalizePath(href));
    if(direct)return direct.id;
   }
-  const best=state.candidates.map(c=>({c,s:similarity(title,c.title)})).sort((a,b)=>b.s-a.s)[0];
+  const best=state.candidates.map(c=>({c,s:similarity(title,c.title)-(candidateLooksTocOrBodyless(c)?0.5:0)})).sort((a,b)=>b.s-a.s)[0];
   if(best&&best.s>=0.55)return best.c.id;
   return state.candidates[fallbackIndex++]?.id||null;
  }
@@ -2505,7 +2571,7 @@ function groupsFromUnitTree(unit,tree,unitCandidates){
  const resolve=(href,title)=>{
   if(href){const arr=byPath.get(normalizePath(href.split("#")[0]))||[];const c=arr.find(x=>!used.has(x.id));if(c){used.add(c.id);return {id:c.id,byHref:true,candidate:c};}}
   const rem=unitCandidates.filter(c=>!used.has(c.id));
-  const best=rem.map(c=>({c,s:improvedMatchScore(title,c)})).sort((a,b)=>b.s-a.s)[0];
+  const best=rem.map(c=>({c,s:bodyPreferringScore(title,c)})).sort((a,b)=>b.s-a.s)[0];
   if(best&&best.s>=0.6){used.add(best.c.id);return {id:best.c.id,byHref:false,candidate:best.c};}
   const f=unitCandidates[fb++];if(f&&!used.has(f.id)){used.add(f.id);return {id:f.id,byHref:false,candidate:f};}
   return null;
@@ -2713,9 +2779,9 @@ function assignExplicitGroupsGloballyFromCandidates(groups){
  const normVol=x=>String(x||"").replace(/\s|제/g,"").toLowerCase();
  const bestFor=(title,groupTitle)=>{
   let bs=-1;
-  for(const c of pool){if(used.has(c.id))continue;const sc=improvedMatchScore(title,c);if(sc>bs)bs=sc;}
+  for(const c of pool){if(used.has(c.id))continue;const sc=bodyPreferringScore(title,c);if(sc>bs)bs=sc;}
   if(bs<0.6)return {best:null,bs};
-  const top=pool.filter(c=>!used.has(c.id)&&Math.abs(improvedMatchScore(title,c)-bs)<1e-9);
+  const top=pool.filter(c=>!used.has(c.id)&&Math.abs(bodyPreferringScore(title,c)-bs)<1e-9);
   // 같은 제목이 여러 권에 있으면 붙여넣은 권 제목과 같은 권(sourceVolume) 후보를 우선
   const gv=normVol(groupTitle);
   const sameVol=gv?top.filter(c=>normVol(c.sourceVolume)===gv):[];
