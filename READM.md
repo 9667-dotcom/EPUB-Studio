@@ -1,47 +1,29 @@
-# EPUB Studio Mobile v7.9.19 — Full Code Audit
+# EPUB Studio Mobile v7.9.21
 
-이번 버전은 기능 추가판이 아니라 전체 코드 감사 및 런타임 오류 수정판입니다.
+## 4. 목차 편집 모바일 UX 개선
 
-## 실제로 발견한 치명적 오류
-1. `isVolumeHeadingLine()` 미정의 — v7.9.18에서 수정.
-2. `isPartHeadingLine()` 미정의 — v7.9.18에서 수정.
-3. `serializeXML()` 미정의 — v7.9.19에서 추가 수정.
+기능/매칭 엔진은 v7.9.20을 유지하고 편집 화면만 사용하기 쉽게 재구성했습니다.
 
-`mergeEmptyChapterPartPages()`가 XML DOM을 수정한 뒤 `serializeXML()`을 호출했지만 함수가 존재하지 않아, 앞의 ReferenceError를 고친 뒤 다음 단계에서 또 중단될 수 있었습니다.
+- 권별 접기/펼치기
+- 모두 펼치기 / 모두 접기
+- 전체 / 문제만 / 미배정 / 불일치 / 본문 없음 필터
+- 상단 고정 검색·필터 도구
+- 현재 권 수 / 항목 수 / 미배정 / 불일치 / 본문 없음 즉시 표시
+- 모바일에서 표 대신 화별 카드 형태로 표시
+- 카드에서 제목 수정 / 매칭 상태 / 원본 선택 / 다른 권 이동 / 본문 보기 / 목차 제외
+- 표지 설정은 권 헤더 아래 접이식 영역으로 이동
+- 프로젝트 저장/불러오기·실행취소는 '편집 도구' 접이식 영역으로 이동
+- 검색하면 해당 권을 자동으로 펼치고 화 카드 위치로 이동
+- 선택한 화 본문 미리보기 역시 접이식으로 변경
 
-## 이번 검사 방식
-- `node --check`: 전체 script 3개 문법 검사
-- TypeScript `--allowJs --checkJs`: 전체 애플리케이션 스크립트의 미정의 이름 검사
-- 외부 번들 `JSZip`을 제외한 애플리케이션 미정의 이름 0개
-- 실제 DOM id 중복 검사
-- `$()` / `getElementById()` 참조 대상 검사
-- `data-target` / `data-next` 이동 대상 검사
-- id가 있는 버튼 34개 이벤트 연결 검사
-- 함수 중복 선언 검사
-- Node VM에서 top-level 및 DOMContentLoaded 초기화 코드 실행 검사
+목차 파싱/매칭 알고리즘은 v7.9.20의 8/8 회귀 통과 코드를 변경하지 않았습니다.
 
-## 신규 런타임 자체검사
-페이지 로드 시 `runtimeSelfCheck()`가 다음 필수 기능을 확인합니다.
-- JSZip
-- DOMParser / XMLSerializer
-- serializeXML
-- mergeEmptyChapterPartPages
-- validateGeneratedEpubBlob
-- TXT / 다권 EPUB / 단일 EPUB 생성 함수
-- Volume / Part / Chapter 구조 판정 함수
 
-필수 기능이 빠졌으면 EPUB 생성 버튼을 누른 뒤 뒤늦게 ReferenceError가 나는 대신, 로드 단계에서 명확한 오류를 냅니다.
+## 목차 엔진 회귀 검사
+v7.9.20과 동일한 실제 JavaScript 회귀 테스트를 v7.9.21에서 다시 실행했습니다.
 
-## 유지되는 기능
-- 권 전용 페이지 별도 XHTML
-- 자체 본문 없는 Chapter/Part를 첫 하위 화와 결합
-- Chapter/Part 반복 번호 문맥 매칭
-- `_999`, `_9999` 보조 문자열 무시 매칭
-- `8권 (외전2)` 권 인식
-- 작품 설명/설명 이미지
-- 파일 선택 즉시 바이트 캐시
-- 다권 EPUB CSS basename 충돌 방지 alias
-- OPF/NAV/NCX/XML/ZIP/내부 링크 검사
+- 총 테스트: 8
+- 통과: 8
+- 실패: 0
 
-## 제한
-이 컨테이너의 Chromium headless 프로세스가 정상 종료/렌더링되지 않아 실제 모바일 브라우저 전체 클릭 자동화는 수행하지 못했습니다. 대신 정적 검사 + TypeScript 미정의 이름 검사 + Node VM 초기화 실행 검사를 함께 수행했습니다.
+결과 파일: `toc_regression_report.json`
