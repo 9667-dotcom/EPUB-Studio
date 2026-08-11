@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>EPUB Studio Mobile v7.9.16</title>
+<title>EPUB Studio Mobile v7.9.19</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -84,7 +84,7 @@ window.addEventListener("unhandledrejection",function(e){
 </script>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v7.9.16</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본 · build 7.9.7</div></header>
+<header><h1>EPUB Studio Mobile v7.9.19</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본 · build 7.9.19</div></header>
 <main>
 
 <div id="buildMode">
@@ -160,6 +160,7 @@ window.addEventListener("unhandledrejection",function(e){
 <label><input id="flatToc" type="checkbox"> 목차를 평평하게 (권 페이지 없이 화만 나열)</label>
 <div class="small">켜면 '본문' 같은 권 묶음 페이지를 만들지 않고, 표지·작품설명 다음에 1화·2화…를 같은 레벨로 쭉 나열합니다. 130화짜리 단일 연재본처럼 권이 없는 경우에 적합합니다.</div>
 <textarea id="tocText" placeholder="1권&#10;1화&#10;2화&#10;&#10;2권&#10;3화&#10;4화&#10;&#10;[권] 외전&#10;외전 1화"></textarea>
+<p class="small"><b>다권 EPUB CSS 충돌 방지:</b> 원본 CSS는 그대로 보존하면서 실제 XHTML에는 권별 고유 CSS alias를 연결합니다. 여러 권이 모두 <code>stylesheet.css</code>와 <code>.calibre3</code>를 써도 다른 권 스타일이 섞이지 않게 합니다.</p>
 <p class="small"><b>EPUB 본문 보호:</b> 자동 내부 제목 감지는 실제 h1~h6을 우선하며, 일반 p 문단은 프롤로그·에필로그·외전·후기 같은 명확한 구조 제목일 때만 목차 후보로 사용합니다. 생성 후 원본보다 heading 태그가 비정상적으로 증가하면 EPUB 생성을 중단합니다.</p>
 <p class="small"><b>Chapter/Part 최종 페이지 규칙:</b> 자체 본문이 없으면 별도 XHTML을 최종본에서 제거하고 첫 하위 화 XHTML 상단에 제목을 결합합니다. 자체 본문이 있으면 독립 XHTML을 유지합니다. <b>권 전용 페이지는 항상 기존처럼 제목만 있는 별도 XHTML을 유지합니다.</b></p>
 <p class="small"><b>Chapter 제목 처리:</b> <code>Chapter 3. 업</code>처럼 바로 다음 줄이 <code>01.</code>이라 Chapter 자체 본문이 없는 경우에도 오류로 보지 않고 <b>구조 제목 · 첫 하위 화와 결합</b>으로 유지합니다. 반대로 Chapter 제목 뒤에 바로 본문이 이어지면 일반 본문 항목으로 처리합니다.</p>
@@ -253,7 +254,7 @@ window.addEventListener("unhandledrejection",function(e){
 </section>
 
 <section id="preflightCard" class="card app-step full-only">
-<h2>생성 전 검사</h2><p class="small">v7.9.9은 편집 화면과 생성 엔진이 동일한 프로젝트 구조를 사용합니다. 오류가 있으면 다운로드 대신 정확한 원인을 표시합니다.</p>
+<h2>생성 전 검사</h2><p class="small">v7.9.19는 편집 화면과 생성 엔진이 동일한 프로젝트 구조를 사용합니다. 오류가 있으면 다운로드 대신 정확한 원인을 표시합니다.</p>
 <div id="preflightReport" class="status">원본과 목차를 분석하면 검사 결과가 표시됩니다.</div>
 </section>
 
@@ -352,7 +353,7 @@ XML·manifest·spine·내부 링크·ZIP 검사는 항상 실행되며, 실패�
 
 <section class="card">
 <h2>처리 상태</h2>
-<div id="status" class="status">v7.9.9 준비됨. 원본 파일을 선택하세요.</div>
+<div id="status" class="status">v7.9.19 준비됨. 원본 파일을 선택하세요.</div>
 <div id="result"></div>
 </section>
 
@@ -384,7 +385,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 </script>
 <script>
 "use strict";
-const APP_VERSION="7.9.11";
+const APP_VERSION="7.9.19";
 const $=id=>document.getElementById(id);
 let state={inputType:null,zip:null,originalBytes:null,opfPath:"",opfDir:"",opfDoc:null,manifest:new Map(),spine:[],candidates:[],groups:[],title:"",creator:"",navHref:null,ncxHref:null,txtFiles:[],coverCandidates:[],sourceCoverByGroup:new Map(),manualGrouping:false,epubUnits:[]};
 
@@ -464,6 +465,7 @@ function descriptionImageCount(){return descImageCache.length||($("descImages")?
 
 function log(msg){$("status").textContent += "\n"+msg; $("status").scrollTop=$("status").scrollHeight}
 function setStatus(msg){$("status").textContent=msg}
+function serializeXML(doc){return new XMLSerializer().serializeToString(doc)}
 function local(el){return el.localName||el.nodeName.split(":").pop()}
 function children(el,name){return [...el.childNodes].filter(n=>n.nodeType===1 && local(n)===name)}
 function descendants(el,name){return [...el.getElementsByTagName("*")].filter(n=>local(n)===name)}
@@ -1020,6 +1022,14 @@ function partLabelAt(marks,lineIndex){
 function isChapterContextTitle(title){
  const s=String(title||"").normalize("NFKC").trim();
  return /^(?:chapter\s*[.．:]?\s*\d+\b.*|part\s*[.．:]?\s*\d+\b.*|파트\s*\d+\b.*)$/i.test(s);
+}
+function isVolumeHeadingLine(title){
+ const s=String(title||"").normalize("NFKC").trim();
+ return /^(?:\[?\s*\d+\s*권\s*\]?|\[?\s*(?:외전|특별편|번외편)\s*\]?|\d+\s*권\s*\(\s*(?:외전|특별편|번외편)[^)]*\))$/i.test(s);
+}
+function isPartHeadingLine(title){
+ const s=String(title||"").normalize("NFKC").trim();
+ return /^(?:part\s*[.．:]?\s*\d+\b.*|파트\s*\d+\b.*|제?\s*\d+\s*부)$/i.test(s);
 }
 function findChapterContextMarkers(lines){
  const marks=[];
@@ -4091,6 +4101,25 @@ function countHeadingTags(xhtml){
  const m=String(xhtml||"").match(/<h[1-6]\b/gi);
  return m?m.length:0;
 }
+
+async function validateCollectionCssIsolation(zip){
+ const errors=[];
+ for(const unit of state.epubUnits||[]){
+  for(const sec of unit.sections||[]){
+   if(!/xhtml|html/i.test(sec.media||""))continue;
+   const outPath=`OEBPS/${unit.folder}/${sec.fullPath}`,f=zip.file(outPath);if(!f)continue;
+   const text=await f.async("text");
+   const links=[...text.matchAll(/<link\b[^>]*\brel\s*=\s*["'][^"']*stylesheet[^"']*["'][^>]*\bhref\s*=\s*["']([^"']+)["']/gi)].map(m=>m[1]);
+   for(const href of links){
+    if(isExternalEpubRef(href))continue;
+    if(!/__hm_u\d+\.css(?:$|[?#])/i.test(href))errors.push(`${unit.name} / ${sec.href}: CSS 고유 alias 미적용 (${href})`);
+   }
+  }
+ }
+ if(errors.length)throw new Error("권별 CSS 격리가 적용되지 않은 XHTML이 있습니다.\n"+errors.slice(0,30).map(x=>"• "+x).join("\n"));
+ return true;
+}
+
 async function validateCopiedHeadingCounts(zip){
  const errors=[];
  for(const unit of state.epubUnits||[]){
@@ -4113,6 +4142,32 @@ async function validateCopiedHeadingCounts(zip){
  return true;
 }
 
+
+function hmCssAliasPath(sourcePath,unitIndex){
+ const p=normalizePath(sourcePath),slash=p.lastIndexOf("/");
+ const dir=slash>=0?p.slice(0,slash+1):"",base=slash>=0?p.slice(slash+1):p;
+ const dot=base.lastIndexOf("."),stem=dot>=0?base.slice(0,dot):base,ext=dot>=0?base.slice(dot):"";
+ return `${dir}${stem}__hm_u${String(unitIndex+1).padStart(3,"0")}${ext}`;
+}
+function hmRelativeSourceHref(fromSource,toSource){
+ const a=normalizePath(fromSource).split("/");a.pop();const b=normalizePath(toSource).split("/");
+ while(a.length&&b.length&&a[0]===b[0]){a.shift();b.shift()}
+ return "../".repeat(a.length)+b.join("/");
+}
+function rewriteXhtmlCssLinksForUnit(xhtml,sourceXhtmlPath,cssAliasMap){
+ if(!cssAliasMap?.size)return xhtml;
+ return String(xhtml||"").replace(
+  /(<link\b[^>]*\brel\s*=\s*["'][^"']*stylesheet[^"']*["'][^>]*\bhref\s*=\s*["'])([^"']+)(["'][^>]*>)/gi,
+  (all,a,href,b)=>{
+   if(isExternalEpubRef(href))return all;
+   const clean=splitEpubRef(href).path;
+   const resolved=normalizePath(dirname(sourceXhtmlPath)+safeDecodeURIComponent(clean));
+   const alias=cssAliasMap.get(resolved);
+   return alias?a+hmRelativeSourceHref(sourceXhtmlPath,alias)+b:all;
+  }
+ );
+}
+
 async function buildEpubCollection(){
  const zip=new JSZip();
  zip.file("mimetype","application/epub+zip",{compression:"STORE"});
@@ -4126,10 +4181,15 @@ async function buildEpubCollection(){
 
  // 각 원본 EPUB의 모든 실제 리소스를 독립 폴더에 복사한다.
  // manifest에 빠진 CSS·이미지·SVG·JS도 보존하고 완성 OPF manifest에 등록한다.
+ // v7.9.17: 리더의 동일 CSS basename 캐시 충돌을 피하기 위해 권별 CSS alias를 추가한다.
  const cssExpectations=[];
  for(const unit of state.epubUnits){
   const bySourcePath=new Map([...unit.manifest.values()].map(item=>[join(unit.opfDir,item.href),item]));
   const originalNavPaths=new Set([...unit.manifest.values()].filter(item=>item.media==="application/x-dtbncx+xml"||(item.properties||"").split(/\s+/).includes("nav")).map(item=>join(unit.opfDir,item.href)));
+  const cssAliasMap=new Map();
+  for(const sourcePath of Object.keys(unit.zip.files)){
+   if(!unit.zip.files[sourcePath].dir&&/\.css$/i.test(sourcePath))cssAliasMap.set(normalizePath(sourcePath),hmCssAliasPath(sourcePath,unit.index));
+  }
   for(const sourcePath of Object.keys(unit.zip.files)){
    const source=unit.zip.files[sourcePath];
    if(source.dir||sourcePath==="mimetype"||sourcePath===unit.opfPath||/^META-INF\//i.test(sourcePath)||originalNavPaths.has(sourcePath))continue;
@@ -4138,14 +4198,24 @@ async function buildEpubCollection(){
    const outputHref=`${unit.folder}/${sourcePath}`;
    const outputPath=`OEBPS/${outputHref}`;
    const bytes=await source.async("uint8array");
-   zip.file(outputPath,bytes);
    const media=item?.media||mediaType(sourcePath)||"application/octet-stream";
    const props=item?.properties||"";
+   if(/xhtml|html/i.test(media)){
+    const text=new TextDecoder("utf-8").decode(bytes);
+    zip.file(outputPath,rewriteXhtmlCssLinksForUnit(text,sourcePath,cssAliasMap));
+   }else zip.file(outputPath,bytes);
    add(`u${unit.index}_${item?.id||sourcePath}`,outputHref,media,props.split(/\s+/).filter(x=>x&&x!=="nav"&&x!=="cover-image").join(" "));
-   if(/\.css$/i.test(sourcePath))cssExpectations.push(await makeCssExpectation(bytes,outputPath,`${unit.name} / ${sourcePath}`));
+   if(/\.css$/i.test(sourcePath)){
+    cssExpectations.push(await makeCssExpectation(bytes,outputPath,`${unit.name} / ${sourcePath}`));
+    const aliasSource=cssAliasMap.get(normalizePath(sourcePath));
+    if(aliasSource){
+     const aliasHref=`${unit.folder}/${aliasSource}`,aliasOut=`OEBPS/${aliasHref}`;
+     zip.file(aliasOut,bytes);
+     add(`u${unit.index}_cssalias_${sourcePath}`,aliasHref,"text/css");
+    }
+   }
   }
  }
-
 
  // 한 XHTML 안의 에필로그/외전 등은 원문을 쪼개지 않고 제목 요소에 내부 앵커만 추가한다.
  const fragmentByBase=new Map();
@@ -4351,7 +4421,7 @@ async function buildEpubCollection(){
  if(readabilityErrors.length)$("buildLog").textContent+="\n⚠ 가독성 개선을 건너뛴 파일 "+readabilityErrors.length+"개\n"+readabilityErrors.slice(0,10).map(x=>"  - "+x).join("\n");
 
  setBuildProgress(92,"EPUB 묶음을 최종 패키징하고 다시 검증합니다.");
- const mergedContextPages=await mergeEmptyChapterPartPages(zip);await validateCopiedHeadingCounts(zip);const blob=await generateEpubBlob(zip);
+ const mergedContextPages=await mergeEmptyChapterPartPages(zip);await validateCopiedHeadingCounts(zip);await validateCollectionCssIsolation(zip);const blob=await generateEpubBlob(zip);
  const validation=await validateGeneratedEpubBlob(blob,"OEBPS/content.opf",$("validateCssBuild")?.checked?cssExpectations:[]);
  const url=createManagedEpubUrl(blob),safe=title.replace(/[\/:*?"<>|]/g,"_");
  const filename=resolvedOutputFilename();
@@ -5012,7 +5082,28 @@ function bindStepNavigation(){
   steps.forEach(x=>observer.observe(x));
  }
 }
+function runtimeSelfCheck(){
+ const missing=[];
+ if(typeof JSZip==="undefined")missing.push("JSZip");
+ if(typeof DOMParser==="undefined")missing.push("DOMParser");
+ if(typeof XMLSerializer==="undefined")missing.push("XMLSerializer");
+ for(const [name,fn] of Object.entries({
+  serializeXML,
+  mergeEmptyChapterPartPages,
+  validateGeneratedEpubBlob,
+  buildTxtEpub,
+  buildEpubCollection,
+  buildSingleEpubReadabilityOnly,
+  isVolumeHeadingLine,
+  isPartHeadingLine,
+  isChapterContextTitle
+ }))if(typeof fn!=="function")missing.push(name);
+ if(missing.length)throw new Error("프로그램 필수 기능 누락: "+missing.join(", "));
+ return true;
+}
+
 window.addEventListener("DOMContentLoaded",()=>{
+ runtimeSelfCheck();
  bindStepNavigation();
  bindStepNextButtons();
  $("closeBuildProgressBtn").onclick=()=>$("buildProgressOverlay").classList.add("hidden");

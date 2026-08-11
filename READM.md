@@ -1,25 +1,47 @@
-# EPUB Studio Mobile v7.9.16
+# EPUB Studio Mobile v7.9.19 — Full Code Audit
 
-## 맨 마지막 외전 본문이 제목처럼 보이는 문제 방어
+이번 버전은 기능 추가판이 아니라 전체 코드 감사 및 런타임 오류 수정판입니다.
 
-### 확인한 원본
-`[탕쥐]대표이사 사용설명서.zip`의 마지막 `외전 2` 원본:
-- 실제 제목: `<h1>외전: Ending, never ending.</h1>`
-- 실제 본문: `<p class="calibre3">...</p>`
-- 원본 자체는 정상입니다.
+## 실제로 발견한 치명적 오류
+1. `isVolumeHeadingLine()` 미정의 — v7.9.18에서 수정.
+2. `isPartHeadingLine()` 미정의 — v7.9.18에서 수정.
+3. `serializeXML()` 미정의 — v7.9.19에서 추가 수정.
 
-### 수정
-- 한 XHTML 내부 제목 자동 감지에서 일반 `<p>`를 무분별하게 제목 후보로 사용하지 않음
-- 실제 `<h1>~<h6>`를 우선
-- `<p>`는 프롤로그/에필로그/외전/후기 등 명확한 구조 제목일 때만 자동 후보
-- 다권 EPUB 합본 생성 후 각 원본 XHTML의 heading 태그 개수를 원본과 비교
-- Chapter/Part 결합으로 허용되는 +1개를 초과해 heading이 늘어나면 생성 차단
-- `가독성만 적용(원본 구조 그대로)` 모드에서는 Chapter/Part 병합을 실행하지 않도록 수정
+`mergeEmptyChapterPartPages()`가 XML DOM을 수정한 뒤 `serializeXML()`을 호출했지만 함수가 존재하지 않아, 앞의 ReferenceError를 고친 뒤 다음 단계에서 또 중단될 수 있었습니다.
 
-## 유지
+## 이번 검사 방식
+- `node --check`: 전체 script 3개 문법 검사
+- TypeScript `--allowJs --checkJs`: 전체 애플리케이션 스크립트의 미정의 이름 검사
+- 외부 번들 `JSZip`을 제외한 애플리케이션 미정의 이름 0개
+- 실제 DOM id 중복 검사
+- `$()` / `getElementById()` 참조 대상 검사
+- `data-target` / `data-next` 이동 대상 검사
+- id가 있는 버튼 34개 이벤트 연결 검사
+- 함수 중복 선언 검사
+- Node VM에서 top-level 및 DOMContentLoaded 초기화 코드 실행 검사
+
+## 신규 런타임 자체검사
+페이지 로드 시 `runtimeSelfCheck()`가 다음 필수 기능을 확인합니다.
+- JSZip
+- DOMParser / XMLSerializer
+- serializeXML
+- mergeEmptyChapterPartPages
+- validateGeneratedEpubBlob
+- TXT / 다권 EPUB / 단일 EPUB 생성 함수
+- Volume / Part / Chapter 구조 판정 함수
+
+필수 기능이 빠졌으면 EPUB 생성 버튼을 누른 뒤 뒤늦게 ReferenceError가 나는 대신, 로드 단계에서 명확한 오류를 냅니다.
+
+## 유지되는 기능
 - 권 전용 페이지 별도 XHTML
-- 자체 본문 없는 Chapter/Part 첫 하위 화 결합
-- 원본 CSS/이미지/SVG/JS 보존
-- 작품 설명
-- 파일 즉시 바이트 캐시
-- NAV/NCX/OPF/ZIP 검증
+- 자체 본문 없는 Chapter/Part를 첫 하위 화와 결합
+- Chapter/Part 반복 번호 문맥 매칭
+- `_999`, `_9999` 보조 문자열 무시 매칭
+- `8권 (외전2)` 권 인식
+- 작품 설명/설명 이미지
+- 파일 선택 즉시 바이트 캐시
+- 다권 EPUB CSS basename 충돌 방지 alias
+- OPF/NAV/NCX/XML/ZIP/내부 링크 검사
+
+## 제한
+이 컨테이너의 Chromium headless 프로세스가 정상 종료/렌더링되지 않아 실제 모바일 브라우저 전체 클릭 자동화는 수행하지 못했습니다. 대신 정적 검사 + TypeScript 미정의 이름 검사 + Node VM 초기화 실행 검사를 함께 수행했습니다.
