@@ -755,19 +755,19 @@ function updateCleanupSummary(){
 function groupHeading(line){
  const s=line.trim();
  if(/^\[(?:권|상위)\]\s*.+$/i.test(s))return true;
- // [1권], [7권 (특별 외전)], [9권 (특별 외전2)] 처럼 '대괄호 안이 실제 권 형태'일 때만 권으로 인식.
- // (게임/채팅 소설의 [일반/미노내꺼: …기권…] 같은 대사 줄이 권으로 오인되지 않게 한다.)
- const br=/^\[(.+)\]$/.exec(s);
+ // [1권]·<2권>·【3권】·《외전 권》 처럼 대괄호/꺾쇠/전각 괄호로 감싼 경우 안쪽만 검사한다.
+ // (게임/채팅 소설의 [일반/미노내꺼: …기권…] 같은 대사 줄이 권으로 오인되지 않게 안쪽이 '권 형태'일 때만 인정.)
+ const br=/^[\[\(<【《〈「『]\s*(.+?)\s*[\]\)>】》〉」』]$/.exec(s);
  if(br){
   const inner=br[1].trim();
-  if(/^(?:제?\s*\d+\s*(?:권|부)|(?:외전|특별편|번외편?)\s*\d*\s*권|상위)/i.test(inner))return true;
-  // 대괄호로 명시한 [외전] / [특별편] / [번외편]은 사용자가 의도한 상위 그룹으로 본다.
+  if(/^(?:제?\s*\d+\s*권|(?:외전|특별편|번외편?)\s*\d*\s*권|상위)/i.test(inner))return true;
+  // 대괄호/꺾쇠로 명시한 <외전> / [특별편] / <번외편>은 사용자가 의도한 상위 그룹으로 본다.
   if(/^(?:외전|특별편|번외편?)\s*\d*$/i.test(inner))return true;
   return false;
  }
  // 외전·특별편·번외편은 '권'이 붙어야(또는 위의 [권] 접두사) 볼륨으로 인식한다.
  // 그냥 '외전' / '외전 1'은 화 제목이므로 볼륨으로 빼지 않는다.
- return /^(?:제?\s*\d+\s*(?:권|부)(?:\s*\(\s*(?:(?:외전|특별편|번외편)\s*\d*|완결)\s*\))?|외전\s*\d*\s*권|특별편\s*\d*\s*권|번외편?\s*\d*\s*권|special\s*volume(?:\s*\d+)?|side\s*story\s*volume(?:\s*\d+)?)$/i.test(s)
+ return /^(?:제?\s*\d+\s*권(?:\s*\(\s*(?:(?:외전|특별편|번외편)\s*\d*|완결)\s*\))?|외전\s*\d*\s*권|특별편\s*\d*\s*권|번외편?\s*\d*\s*권|special\s*volume(?:\s*\d+)?|side\s*story\s*volume(?:\s*\d+)?)$/i.test(s)
 }
 
 function normalizeTitle(s){
@@ -777,8 +777,13 @@ function normalizeTitle(s){
   .replace(/화|장|회|편|권/g,"");
 }
 function extractNumber(s){
- const m=String(s||"").match(/(?:제\s*)?(\d+)\s*(?:화|장|회|편)?/);
- return m?Number(m[1]):null;
+ const str=String(s||"");
+ const m=str.match(/(?:제\s*)?(\d+)\s*(?:화|장|회|편)?/);
+ if(m)return Number(m[1]);
+ // 영어 숫자 단어(Chapter One / Part Two …)도 번호로 인식해 라벨 혼동을 막는다.
+ const words={one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19,twenty:20};
+ const w=str.toLowerCase().match(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b/);
+ return w?words[w[1]]:null;
 }
 function similarity(a,b){
  const na=normalizeTitle(a),nb=normalizeTitle(b);
@@ -856,6 +861,10 @@ function chapterIsIgnorableUnassigned(ch){
  if(ch?.sourceId)return false;
  if(isIgnorableTocEntryTitle(ch?.title))return true;
  if(tocEntryMatchesExcludedFrontPage(ch?.title))return true;
+ // chapter/파트 같은 '구조 제목'은 본문이 있으면 매칭된다. 미배정으로 남았다는 것은
+ // 자체 본문이 없는 상위 구분 제목이라는 뜻이므로(사용자 목차상 내용 없는 chapter 허용)
+ // 생성 차단 대상에서 제외한다.
+ if(isChapterContextTitle(ch?.title)||isPartHeadingLine(ch?.title))return true;
  return false;
 }
 
@@ -976,6 +985,8 @@ function requestedPureNumber(title){
 // '15년 전', '15명이' 같은 본문은 걸리지 않는다.
 function sourceHeadingNumber(title){
  const s=String(title||"").trim();
+ // 순수 번호 한 줄(1, 01, 23 …)은 헤딩으로 본다. 본문 산문은 숫자만으로 된 줄이 거의 없다.
+ if(/^\d{1,4}$/.test(s))return Number(s);
  // 'N. 제목'(마침표 뒤 공백/끝) 또는 'N화 …' 형태만 헤딩 번호로 인정.
  // '1)', '1.BUM', '2.핌' 같은 본문/목록 줄은 제외한다.
  const m=s.match(/^(?:제\s*)?(\d+)\s*(?:[.．](?:[\s)]|$|_\d+\s*$)|화|장|회|편|:\s)/);
@@ -1119,7 +1130,7 @@ function titleMatchesLoose(sourceTitle,requestedTitle){
  // 유사도 때문에 같은 제목으로 합치지 않는다.
  const snum=extractNumber(sourceTitle),rnum=extractNumber(requestedTitle);
  if(snum!==null&&rnum!==null&&snum!==rnum){
-  const stem=v=>normalizeTitle(String(v||"").replace(/\d+/g,""));
+  const stem=v=>normalizeTitle(String(v||"").replace(/\d+/g,"").replace(/\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b/gi,""));
   const sa=stem(sourceTitle),ra=stem(requestedTitle);
   if(sa&&ra&&sa===ra)return false;
  }
@@ -1143,8 +1154,8 @@ function findVolumeMarkersInText(lines){
  for(let i=0;i<lines.length;i++){
   let s=String(lines[i]||"").trim();
   if(!s||s.length>24)continue;
-  // 대괄호로 감싼 경우 안쪽만 검사([1권], [외전 권] 등). 아무 대괄호 줄이나 잡지 않는다.
-  const bracket=/^\[(.+)\]$/.exec(s);
+  // 대괄호/꺾쇠/전각 괄호로 감싼 경우 안쪽만 검사([1권], <2권>, 【외전 권】 등). 아무 괄호 줄이나 잡지 않는다.
+  const bracket=/^[\[\(<【《〈「『]\s*(.+?)\s*[\]\)>】》〉」』]$/.exec(s);
   const inner=bracket?bracket[1].trim():s;
   if(/^(?:제\s*)?\d+\s*권(?:\s*\(.{1,12}\))?$/.test(inner)){marks.push({lineIndex:i,label:inner});continue;}
   if(/^(?:외전|특별편|번외편?)\s*\d*\s*권$/.test(inner)){marks.push({lineIndex:i,label:inner});continue;}
@@ -1210,11 +1221,24 @@ function partLabelAt(marks,lineIndex){
 }
 
 function isChapterContextTitle(title){
- const s=String(title||"").normalize("NFKC").trim();
- return /^(?:chapter\s*[.．:]?\s*\d+\b.*|part\s*[.．:]?\s*\d+\b.*|파트\s*\d+\b.*)$/i.test(s);
+ let s=String(title||"").normalize("NFKC").trim();
+ // [chapter 1]·<chapter 1>처럼 괄호로 감싼 경우 안쪽만 본다.
+ const w=/^[\[\(<【《〈「『]\s*(.+?)\s*[\]\)>】》〉」』]$/.exec(s);
+ if(w)s=w[1].trim();
+ const NUM="\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty";
+ return new RegExp(
+  "^(?:"+
+  "chapter\\s*[.．:]?\\s*(?:"+NUM+")\\b.*"+     // chapter 1 / Chapter One / [chapter 1]
+  "|part\\s*[.．:]?\\s*(?:"+NUM+")\\b.*"+        // part 1 / part one
+  "|파트\\s*\\d+\\b.*"+                          // 파트 1
+  "|제?\\s*\\d+\\s*장(?:\\s.*)?"+                // 제1장 / 1장 / 1장 제목  (1장면 등은 제외)
+  "|제?\\s*\\d+\\s*부(?:\\s.*)?"+                // 제1부 / 1부  (1부분 등은 제외)
+  ")$","i").test(s);
 }
 function isVolumeHeadingLine(title){
- const s=String(title||"").normalize("NFKC").trim();
+ let s=String(title||"").normalize("NFKC").trim();
+ const w=/^[\[\(<【《〈「『]\s*(.+?)\s*[\]\)>】》〉」』]$/.exec(s);
+ if(w)s=w[1].trim();
  return /^(?:\[?\s*\d+\s*권\s*\]?|\[?\s*(?:외전|특별편|번외편)\s*\]?|\d+\s*권\s*\(\s*(?:외전|특별편|번외편)[^)]*\))$/i.test(s);
 }
 function isPartHeadingLine(title){
@@ -1508,7 +1532,7 @@ function parseToc(text){
  let groups=[],cur=null,currentContext=null;
  for(const line of lines){
   if(groupHeading(line)){
-   const title=line.replace(/^\[(?:권|상위)\]\s*/i,"").replace(/^\[(.+)\]$/,"$1").trim();
+   const title=line.replace(/^\[(?:권|상위)\]\s*/i,"").replace(/^[\[\(<【《〈「『]\s*(.+?)\s*[\]\)>】》〉」』]$/,"$1").trim();
    cur={title,chapters:[],coverFile:null,coverMode:null,originalCoverHref:null};groups.push(cur);
    // 2권·3권처럼 단순 권 경계는 Chapter가 이어질 수 있으므로 문맥 유지.
    // 외전/특별편 같은 별도 구분으로 넘어가면 이전 Chapter 문맥을 끊는다.
@@ -1715,31 +1739,45 @@ function chooseBestHeadingOccurrence(lines,title,startIndex,tocRange,nextTitle=n
  return {index:best.index,score:best.score,candidates:scored};
 }
 
+// 이 줄(제목) 바로 다음의 '첫 실제 줄'이 산문 문단인지 본다.
+// 목차 항목 뒤에는 또 다른 제목이 오고, 진짜 본문 제목 뒤에는 문단이 온다 →
+// 이 차이로 '목차 내부 번호 반복'과 '실제 본문 시작'을 구분한다.
+function nextNonBlankIsProse(lines,i){
+ for(let j=i+1;j<Math.min(lines.length,i+8);j++){
+  const t=String(lines[j]||"").trim();
+  if(!t)continue;
+  if(/@/.test(t))continue;                                   // 워터마크 스킵
+  if(/^[\s*=＝\-_·•~＊#․.·─—–ㅡ]{1,}$/.test(t))continue;      // 구분선(* * * 등) 스킵
+  if(looksLikeTocEntry(t))return false;                      // 또 다른 제목 → 목차 내부
+  return t.length>=12||/[.!?…。？！]$/.test(t)||/["“”‘’「」『』]/.test(t);
+ }
+ return false;
+}
 function detectInternalTocRange(lines){
  const tocStart=lines.findIndex(isTocHeaderLine);
  if(tocStart<0)return null;
 
  let tocEnd=Math.min(lines.length,tocStart+120);
- for(let i=tocStart+1;i<Math.min(lines.length,tocStart+160);i++){
+ const seen=new Set();
+ for(let i=tocStart+1;i<Math.min(lines.length,tocStart+400);i++){
   const line=lines[i].trim();
   if(!line)continue;
 
-  // Publication metadata usually means the internal TOC block has ended.
+  // 판권/저자 정보가 나오면 목차 블록이 끝난 것으로 본다.
   if(/^(?:지은이|저자|펴낸곳|출판사|발행|저작권|copyright|isbn)\s*[:：]/i.test(line)){
    tocEnd=i+1;
    continue;
   }
 
-  // If a title from the TOC repeats after several entries, this is likely the real body.
   const key=normalizeEmbeddedHeading(line);
-  if(i>tocStart+3){
-   for(let j=tocStart+1;j<i;j++){
-    if(key&&normalizeEmbeddedHeading(lines[j].trim())===key){
-     tocEnd=i;
-     return {start:tocStart,end:tocEnd};
-    }
-   }
+  if(!key)continue;
+  // 목차 제목이 '뒤에 실제 산문이 이어지는' 형태로 다시 나오면 그 지점이 진짜 본문 시작.
+  // chapter/파트 재시작으로 목차 안에서 번호(01·1화 등)가 반복되는 경우는 산문이 없으므로
+  // 본문으로 보지 않고 목차 범위에 계속 포함시킨다(가짜 화·빈 본문 방지).
+  if(i>tocStart+3&&seen.has(key)&&nextNonBlankIsProse(lines,i)){
+   return {start:tocStart,end:i};
   }
+  seen.add(key);
  }
  return {start:tocStart,end:tocEnd};
 }
@@ -1952,9 +1990,13 @@ function extractEmbeddedToc(text,fileName){
   if(!raw)continue;
   const key=normalizeEmbeddedHeading(raw);
   if(!key)continue;
-  // 이미 모은 목차 제목이 '제목처럼' 다시 나오면 그 지점이 실제 본문 시작이다.
+  // 이미 모은 목차 제목이 '뒤에 산문이 이어지는' 형태로 다시 나오면 그 지점이 실제 본문 시작이다.
+  // (chapter 재시작으로 목차 안에서 번호가 반복되는 경우는 산문이 없으므로 본문으로 보지 않는다.)
   if(looksLikeTocEntry(raw)&&titles.some(x=>normalizeEmbeddedHeading(x.title)===key)){
-   bodySearchStart=i;break;
+   if(nextNonBlankIsProse(lines,i)||normalizeEmbeddedHeading(titles[0].title)===key){
+    bodySearchStart=i;break;
+   }
+   continue; // 목차 내부 번호 반복 → 본문 아님, 계속 스캔
   }
   if(/^(?:지은이|펴낸곳|출판|저작권|copyright|isbn)\s*[:：]/i.test(raw))continue;
   // 목차 항목이 아닌 줄(워터마크·산문)은 건너뛴다.
