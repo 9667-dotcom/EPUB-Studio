@@ -1025,7 +1025,7 @@ function embeddedBlockText(inner){
 }
 function embeddedHeadingBlocks(xhtml){
  const out=[];const re=/<(h[1-6]|p)(\b[^>]*)>([\s\S]*?)<\/\1>/gi;let m;
- while((m=re.exec(String(xhtml||"")))){const text=embeddedBlockText(m[3]);if(text)out.push({tag:m[1].toLowerCase(),text,offset:m.index});}
+ while((m=re.exec(String(xhtml||"")))){const text=embeddedBlockText(m[3]);if(text)out.push({tag:m[1].toLowerCase(),text,offset:m.index,emph:/<(?:b|strong|em)\b/i.test(m[3])});}
  return out;
 }
 function sourceLabelComparable(value){return String(value||"").normalize("NFKC").toLowerCase().replace(/\.epub$/i,"").replace(/[\u200B-\u200D\uFEFF]/g,"").replace(/[\s.．:：_\-–—()\[\]{}'"“”‘’]/g,"");}
@@ -1043,6 +1043,14 @@ function isEmbeddedHeaderNoise(text,candidate){
  if(/\b(?:제\s*)?\d+\s*권\s*$/i.test(t)&&t.length<=60)return true;
  if(/\b(?:외전|특별편|번외편?)\s*\d*\s*$/i.test(t)&&t.length>8&&t.length<=60)return true;
  return false;
+}
+// '01.' '02' '13.' '제5화' '5화' '5장'처럼 문단 전체가 '순수 번호 제목'이면 그 번호를 돌려준다.
+// (Calibre 변환본에서 흔한 <p><b>01.</b></p> 형식의 화 구분을 자동 인식하기 위함. '6.25' 같은 건 제외)
+function numericHeadingValue(text){
+ const s=String(text||"").normalize("NFKC").replace(/[\u200B-\u200D\uFEFF]/g,"").trim();
+ let m=s.match(/^(?:제\s*)?(\d{1,4})\s*[.．]?$/); if(m)return Number(m[1]);
+ m=s.match(/^(?:제\s*)?(\d{1,4})\s*(?:화|장|회|편)\s*[.．]?$/); if(m)return Number(m[1]);
+ return null;
 }
 function isStrongEmbeddedHeading(text){
  const s=String(text||"").normalize("NFKC").replace(/[\u200B-\u200D\uFEFF]/g,"").trim();
@@ -1076,17 +1084,28 @@ function autoEmbeddedHeadingsForCandidate(candidate){
   if(/^h[1-6]$/.test(b.tag)&&isStrongEmbeddedHeading(b.text))add(b);
   else if(b.tag==="p"&&isStrongEmbeddedHeading(b.text))add(b);
  }
+ // 순수 번호 제목이 2개 이상이면 화 구분으로 인식해 모두 추가한다.
+ // 단, '굵게(b/strong) 강조됐거나 heading 태그'인 번호만 인정한다.
+ // (본문 속 '0/1/2/4.'처럼 삐삐 화면·목록으로 쪼개진 일반 숫자 문단 오탐 방지)
+ const numeric=meaningful.filter(b=>numericHeadingValue(b.text)!=null&&(/^h[1-6]$/.test(b.tag)||b.emph));
+ if(numeric.length>=2)for(const b of numeric)add(b);
  found.sort((a,b)=>a.offset-b.offset);return found;
 }
 function autoExpandEmbeddedCollectionCandidates(candidates){
  const byUnit=new Map();for(const c of candidates||[]){if(!byUnit.has(c.unitIndex))byUnit.set(c.unitIndex,[]);byUnit.get(c.unitIndex).push(c);}
  const out=[];let splitCount=0;
  for(const list of byUnit.values()){
-  if(list.length!==1||list[0].sourceKind!=="epub"||!list[0].content){out.push(...list);continue;}
-  const c=list[0];
-  if(candidateLooksTocOrBodyless(c)){out.push(c);continue;} // 목차·부가 페이지는 화로 쪼개지 않는다
-  const heads=autoEmbeddedHeadingsForCandidate(c);if(!heads.length){out.push(c);continue;}
-  heads.forEach((h,i)=>{const fragmentId=`hm_auto_${String(c.id).replace(/[^A-Za-z0-9_.-]/g,"_")}_${i+1}`;out.push({...c,id:`${c.id}__auto_${i+1}`,href:`${c.href}#${fragmentId}`,baseHref:c.href.split("#")[0],fragmentId,fragmentText:h.text,title:h.text,index:(c.index??0)+(i+1)/1000,sourceKind:"epub-fragment",parentId:c.id,detectedBy:"embedded-auto"});splitCount++;});
+  for(const c of list){
+   if(c.sourceKind!=="epub"||!c.content){out.push(c);continue;}
+   if(candidateLooksTocOrBodyless(c)){out.push(c);continue;} // 목차·부가 페이지는 화로 쪼개지 않는다
+   const heads=autoEmbeddedHeadingsForCandidate(c);
+   const numericCount=heads.filter(h=>numericHeadingValue(h.text)!=null).length;
+   // 한 권이 파일 1개면 기존처럼 감지된 제목으로 분할한다.
+   // 이미 파일 여러 개로 나뉜 권은, 순수 번호 화가 2개 이상 확실할 때만 추가 분할한다(과분할 방지).
+   const doSplit=heads.length&&(list.length===1||numericCount>=2);
+   if(!doSplit){out.push(c);continue;}
+   heads.forEach((h,i)=>{const fragmentId=`hm_auto_${String(c.id).replace(/[^A-Za-z0-9_.-]/g,"_")}_${i+1}`;out.push({...c,id:`${c.id}__auto_${i+1}`,href:`${c.href}#${fragmentId}`,baseHref:c.href.split("#")[0],fragmentId,fragmentText:h.text,title:h.text,index:(c.index??0)+(i+1)/1000,sourceKind:"epub-fragment",parentId:c.id,detectedBy:"embedded-auto"});splitCount++;});
+  }
  }
  out.sort((a,b)=>(a.index??0)-(b.index??0));out.forEach((c,i)=>c.index=i);return {candidates:out,splitCount};
 }
@@ -1126,13 +1145,20 @@ function titleMatchesLoose(sourceTitle,requestedTitle){
  const rn=requestedPureNumber(requestedTitle);
  if(rn!=null){const sn=sourceHeadingNumber(sourceTitle);return sn!=null&&sn===rn;}
 
- // Momentum 1장 / Momentum 2장처럼 제목의 문자 부분은 같고 번호만 다른 경우를
- // 유사도 때문에 같은 제목으로 합치지 않는다.
- const snum=extractNumber(sourceTitle),rnum=extractNumber(requestedTitle);
- if(snum!==null&&rnum!==null&&snum!==rnum){
-  const stem=v=>normalizeTitle(String(v||"").replace(/\d+/g,"").replace(/\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b/gi,""));
+ // Momentum 1장 / Momentum 2장, 그리고 '1992년 6월 14일' / '1992년 6월 28일'(날짜)처럼
+ // 문자 부분은 같고 숫자만 다른 제목을 유사도 때문에 같은 화로 합치지 않는다.
+ const stem=v=>normalizeTitle(String(v||"").replace(/\d+/g,"").replace(/\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b/gi,""));
+ const digitsOf=v=>(String(v||"").match(/\d+/g)||[]).map(Number).join(",");
+ {
   const sa=stem(sourceTitle),ra=stem(requestedTitle);
-  if(sa&&ra&&sa===ra)return false;
+  if(sa&&ra&&sa===ra){
+   // (1) 영어 숫자단어 포함 등 대표 번호가 다르면 다른 화
+   const snum=extractNumber(sourceTitle),rnum=extractNumber(requestedTitle);
+   if(snum!==null&&rnum!==null&&snum!==rnum)return false;
+   // (2) 날짜처럼 숫자가 여럿이라 대표 번호가 같아도, 숫자열 전체가 다르면 다른 화
+   const sd=digitsOf(sourceTitle),rd=digitsOf(requestedTitle);
+   if(sd&&rd&&sd!==rd)return false;
+  }
  }
 
  if(matchingRequestedTitle(sourceTitle,requestedTitle)||supplementalTitleAliasMatch(sourceTitle,requestedTitle))return true;
@@ -1141,6 +1167,12 @@ function titleMatchesLoose(sourceTitle,requestedTitle){
  const a=strip(sourceTitle),b=strip(requestedTitle);
  if(!a||!b)return false;
  if(a===b)return true;                                  // 문장부호·공백·번호표기 차이 → 정확 일치로 처리
+ // 둘 다 숫자를 포함하는데 숫자열(선행 0 무시)이 다르면, 유사도가 높아도 다른 화로 본다.
+ // ('1992년 6월 14일 일요일' vs '1992년 6월 28일 일요일'처럼 요일까지 달라 어간 비교를 우회하는 날짜 오합치 차단)
+ {
+  const sd=digitsOf(sourceTitle),rd=digitsOf(requestedTitle);
+  if(sd&&rd&&sd!==rd)return false;
+ }
  if(a.length<4||b.length<4)return false;                // 짧은 제목/대사는 오탐 위험 → 정확 일치만
  const lr=Math.min(a.length,b.length)/Math.max(a.length,b.length);
  if(lr<0.7)return false;                                // 길이가 많이 다르면 제외(본문 산문 방지)
