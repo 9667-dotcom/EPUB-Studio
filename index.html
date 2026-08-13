@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>EPUB Studio Mobile v7.9.26</title>
+<title>EPUB Studio Mobile v7.9.27</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -138,7 +138,7 @@ window.addEventListener("unhandledrejection",function(e){
 </script>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v7.9.26</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본 · build 7.9.26</div></header>
+<header><h1>EPUB Studio Mobile v7.9.27</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본 · build 7.9.27</div></header>
 <main>
 
 <div id="buildMode">
@@ -425,7 +425,7 @@ XML·manifest·spine·내부 링크·ZIP 검사는 항상 실행되며, 실패�
 
 <section class="card">
 <h2>처리 상태</h2>
-<div id="status" class="status">v7.9.26 준비됨. 원본 파일을 선택하세요.</div>
+<div id="status" class="status">v7.9.27 준비됨. 원본 파일을 선택하세요.</div>
 <div id="result"></div>
 </section>
 
@@ -2058,6 +2058,24 @@ function extractEmbeddedToc(text,fileName){
  return bodyMarkers.length>=1?{titles,markers:bodyMarkers,tocIndex,bodySearchStart}:null;
 }
 
+// 마침표·'화' 없이 '01','02'처럼 맨 숫자만으로 화가 구분된 경우를 위한 폴백.
+// 앞뒤가 빈 줄인 '고립된 숫자'가 순차 증가로 2개 이상, 충분히 떨어져 있을 때만 화로 본다.
+function scanBareNumberMarkers(lines,fileName){
+ const cand=[];
+ for(let i=0;i<lines.length;i++){
+  const s=lines[i].trim();
+  if(!/^\d{1,3}$/.test(s))continue;
+  const prev=i>0?lines[i-1].trim():"";
+  const next=i+1<lines.length?lines[i+1].trim():"";
+  if(prev!==""||next!=="")continue;           // 본문 속 숫자 오탐 방지: 앞뒤가 빈 줄인 것만
+  cand.push({n:Number(s),lineIndex:i,title:s});
+ }
+ const seq=[];
+ for(const c of cand){if(!seq.length||c.n>seq[seq.length-1].n)seq.push(c);}  // 값이 순차 증가하는 것만
+ if(seq.length<2)return [];
+ for(let i=1;i<seq.length;i++){if(seq[i].lineIndex-seq[i-1].lineIndex<30)return [];} // 근접 숫자(목록 등) 배제
+ return seq.map(c=>({key:`${fileName}::${c.lineIndex}`,title:c.title,displayTitle:c.title,lineIndex:c.lineIndex,sourceFile:fileName,sourceVolume:volumeInfoFromFilename(fileName).label,detectedBy:"pattern-number"}));
+}
 function scanTxtMarkers(text,fileName){
  const embedded=extractEmbeddedToc(text,fileName);
  if(embedded?.markers?.length)return embedded.markers;
@@ -2079,6 +2097,11 @@ function scanTxtMarkers(text,fileName){
    sourceFile:fileName,sourceVolume:volumeInfoFromFilename(fileName).label,
    detectedBy:"pattern"
   });
+ }
+ // 일반 패턴으로 화를 못(거의) 찾았으면, 맨 숫자('01','02'…) 시퀀스로 재시도한다.
+ if(out.length<2){
+  const bare=scanBareNumberMarkers(lines,fileName);
+  if(bare.length>out.length)return bare;
  }
  return out;
 }
