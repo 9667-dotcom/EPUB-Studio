@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>EPUB Studio Mobile v7.9.45</title>
+<title>EPUB Studio Mobile v7.9.47</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -138,7 +138,7 @@ window.addEventListener("unhandledrejection",function(e){
 </script>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v7.9.45</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본 · build 7.9.45</div></header>
+<header><h1>EPUB Studio Mobile v7.9.47</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본 · build 7.9.47</div></header>
 <main>
 
 <div id="buildMode">
@@ -426,7 +426,7 @@ XML·manifest·spine·내부 링크·ZIP 검사는 항상 실행되며, 실패�
 
 <section class="card">
 <h2>처리 상태</h2>
-<div id="status" class="status">v7.9.45 준비됨. 원본 파일을 선택하세요.</div>
+<div id="status" class="status">v7.9.47 준비됨. 원본 파일을 선택하세요.</div>
 <div id="result"></div>
 </section>
 
@@ -1416,6 +1416,21 @@ function rebuildExplicitTocGloballyFromTxt(parsedGroups){
     if(raw.length>Math.max(80,req.length+25))continue;
     markers.push({lineIndex:i,title:raw,requestedTitle:req,contextLabel:chapterContextAt(chapterMarks,i)});
    }
+   // '목차' 헤더 없이 번호 목록(1. 2. 3.)만 있는 파일 대응(붙여넣기 경로):
+   // 앞쪽 마커들의 본문이 (거의) 비어 있고 같은 제목이 뒤에서 실제 본문과 함께 다시 나오면,
+   // 그 앞 덩어리는 목차 목록이므로 제거한다(빈 본문·마지막 화가 전부 삼키는 문제 방지).
+   if(markers.length>=4){
+    const baseOf=t=>baseChapterTitle(t);
+    const clen=(a,b)=>lines.slice(markers[a].lineIndex+1,markers[b]?markers[b].lineIndex:sec.end).join("").replace(/\s+/g,"").length;
+    let tocEnd=0;
+    for(let i=0;i<markers.length-1;i++){
+     const emptyBody=clen(i,i+1)<20;
+     const base=baseOf(markers[i].title);
+     const repeatsLater=base&&markers.slice(i+1).some(m=>baseOf(m.title)===base);
+     if(emptyBody&&repeatsLater)tocEnd=i+1;else break;
+    }
+    if(tocEnd>=1)markers.splice(0,tocEnd);
+   }
    // 같은 Chapter/Part 문맥 안에서만 동일 제목을 중복으로 본다.
    // Chapter가 바뀌어 번호가 01.부터 다시 시작하면 서로 다른 실제 화로 유지한다.
    const seen=new Set(),kept=[];
@@ -2260,6 +2275,21 @@ function scanTxtMarkers(text,fileName){
    sourceFile:fileName,sourceVolume:volumeInfoFromFilename(fileName).label,
    detectedBy:"pattern"
   });
+ }
+ // '목차' 헤더 없이 번호 목록(1. 2. 3.)만 있는 내부 목차 대응:
+ // 앞쪽 마커들의 본문이 (거의) 비어 있고 같은 번호가 뒤에서 실제 본문과 함께 다시 나오면,
+ // 그 앞 덩어리는 목차 목록이므로 제거한다(중복·빈 본문 화 방지).
+ if(out.length>=4){
+  const clen=(a,b)=>lines.slice(out[a].lineIndex+1,out[b]?out[b].lineIndex:lines.length).join("").replace(/\s+/g,"").length;
+  const nums=out.map(m=>sourceHeadingNumber(m.title));
+  let tocEnd=0;
+  for(let i=0;i<out.length-1;i++){
+   const emptyBody=clen(i,i+1)<20;
+   const num=nums[i];
+   const repeatsLater=num!=null&&nums.slice(i+1).includes(num);
+   if(emptyBody&&repeatsLater)tocEnd=i+1;else break;
+  }
+  if(tocEnd>=2)out.splice(0,tocEnd);
  }
  // 일반 패턴으로 화를 못(거의) 찾았으면, 맨 숫자('01','02'…) 시퀀스로 재시도한다.
  if(out.length<2){
