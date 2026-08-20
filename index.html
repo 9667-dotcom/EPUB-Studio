@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>EPUB Studio Mobile v7.9.56</title>
+<title>EPUB Studio Mobile v7.9.57</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -138,7 +138,7 @@ window.addEventListener("unhandledrejection",function(e){
 </script>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v7.9.56</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본 · build 7.9.56</div></header>
+<header><h1>EPUB Studio Mobile v7.9.57</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본 · build 7.9.57</div></header>
 <main>
 
 <div id="buildMode">
@@ -426,7 +426,7 @@ XML·manifest·spine·내부 링크·ZIP 검사는 항상 실행되며, 실패�
 
 <section class="card">
 <h2>처리 상태</h2>
-<div id="status" class="status">v7.9.56 준비됨. 원본 파일을 선택하세요.</div>
+<div id="status" class="status">v7.9.57 준비됨. 원본 파일을 선택하세요.</div>
 <div id="result"></div>
 </section>
 
@@ -1226,7 +1226,47 @@ function prepareEmbeddedEpubCandidatesForGroups(groups){
  out.sort((a,b)=>(a.index??0)-(b.index??0));out.forEach((c,i)=>c.index=i);state.candidates=out;state.spine=out;return {added,replaced,logs};
 }
 function candidateResourceHref(candidate){return String(candidate?.baseHref||candidate?.href||"").split("#")[0];}
+function convertPreWrapContainerToParagraphs(html,fragmentCandidates){
+ const src=String(html||"");
+ // 변환 대상 컨테이너: <pre> 또는 pre-wrap을 쓰는 통짜 <div>(class="text" 등).
+ let m=src.match(/<pre\b[^>]*>([\s\S]*?)<\/pre>/i),full,inner;
+ if(m){full=m[0];inner=m[1];}
+ else{
+  const hasPreWrap=/white-space\s*:\s*pre/i.test(src);
+  if(hasPreWrap){
+   m=src.match(/<div\b[^>]*>([\s\S]*?)<\/div>/i);
+   if(m){full=m[0];inner=m[1];}
+  }
+ }
+ if(!m)return null;
+ // 통짜 텍스트가 맞는지: 내부에 블록 태그가 거의 없고(문단이 줄바꿈으로만 구분) 개행이 많아야 한다.
+ const blockTagCount=(inner.match(/<(p|div|h[1-6]|section|ul|ol|table)\b/gi)||[]).length;
+ if(blockTagCount>3||inner.split("\n").length<4)return null;
+ const esc=s=>String(s).replace(/&(?!(amp|lt|gt|quot|apos|#\d+|#x[0-9a-f]+);)/gi,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+ const unesc=s=>String(s).replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#160;/g," ").replace(/&nbsp;/g," ").replace(/&amp;/g,"&");
+ const blocks=inner.split(/\n[ \t]*\n+/);
+ const parts=[];
+ for(const block of blocks){
+  const rawText=unesc(block.replace(/<[^>]+>/g,"")).replace(/^\s+|\s+$/g,"");
+  if(!rawText)continue;
+  const flat=rawText.replace(/\s+/g," ").trim();
+  const frag=(fragmentCandidates||[]).find(c=>flat.length<=60&&(normalizeEmbeddedHeading(flat)===normalizeEmbeddedHeading(c.fragmentText)||supplementalTitleAliasMatch(flat,c.requestedTitle)));
+  if(frag)parts.push(`<h2 id="${frag.fragmentId}" class="hm-chap">${esc(flat)}</h2>`);
+  else parts.push(`<p>${esc(rawText).replace(/\n/g,"<br/>")}</p>`);
+ }
+ // 모든 조각이 실제로 배치됐는지 확인(하나라도 못 찾으면 변환 취소 → 기존 앵커 로직으로).
+ for(const c of fragmentCandidates||[]){if(!parts.some(p=>p.includes(`id="${c.fragmentId}"`)))return null;}
+ const style=`<style>.hm-body{padding:0 5%}.hm-body p{margin:0 0 1em;line-height:1.8;text-indent:0;word-break:keep-all}.hm-body h2.hm-chap{margin:2em 0 1.2em;font-size:1.4em;line-height:1.4;text-align:center}</style>`;
+ let out=src.replace(full,`<div class="hm-body">\n${parts.join("\n")}\n</div>`);
+ if(/<\/head>/i.test(out))out=out.replace(/<\/head>/i,style+"</head>");
+ else out=out.replace(/<body\b[^>]*>/i,m=>m+style);
+ return out;
+}
 function addFragmentIdsToCopiedXhtml(html,fragmentCandidates){
+ // <pre>/pre-wrap <div>에 통짜로 담긴 본문(리디 등)은 리더가 white-space 스타일을 무시하면
+ // 문단·줄바꿈이 통째로 뭉개진다. 이런 본문은 실제 <p>/<h2>로 변환해 어느 리더에서나 살아나게 한다.
+ const converted=convertPreWrapContainerToParagraphs(html,fragmentCandidates);
+ if(converted!=null)return converted;
  let out=String(html||"");
  for(const c of fragmentCandidates||[]){let done=false;out=out.replace(/<(h[1-6]|p|div|section)(\b[^>]*)>([\s\S]*?)<\/\1>/gi,(m,tag,attrs,inner)=>{if(done)return m;const text=embeddedBlockText(inner);if(!(normalizeEmbeddedHeading(text)===normalizeEmbeddedHeading(c.fragmentText)||supplementalTitleAliasMatch(text,c.requestedTitle)))return m;done=true;if(/\sid\s*=/.test(attrs))return m.replace(/\sid\s*=\s*(["'])[^"']*\1/i,` id="${c.fragmentId}"`);return `<${tag}${attrs} id="${c.fragmentId}">${inner}</${tag}>`;});
   // 블록으로 못 찾으면 <pre>/pre-wrap <div> 등 통짜 텍스트일 수 있다. <body> 안에서 해당 제목 줄을 찾아 앞에 앵커를 심는다.
@@ -4869,8 +4909,11 @@ async function validateCopiedHeadingCounts(zip){
    const finalText=await f.async("text");
    const before=countHeadingTags(sec.content||"");
    const after=countHeadingTags(finalText);
-   // Chapter/Part 병합에서 제목 하나가 추가될 수 있으므로 +1까지만 허용.
-   if(after>before+1){
+   // 통짜 <pre>/pre-wrap 본문을 실제 <p>/<h2> 문단으로 변환한 경우, 화마다 <h2>가 하나씩 생긴다.
+   // 이 섹션에 배치된 조각(화) 수만큼은 정상 증가로 본다.
+   const fragN=(state.candidates||[]).filter(c=>c.sourceKind==="epub-fragment"&&`OEBPS/${candidateResourceHref(c)}`===outPath).length;
+   // Chapter/Part 병합에서 제목 하나가 추가될 수 있으므로 +1까지만 허용(변환 시엔 fragN까지).
+   if(after>before+Math.max(1,fragN)){
     errors.push(`${unit.name} / ${sec.href}: heading 태그가 원본 ${before}개 → 생성본 ${after}개로 비정상 증가`);
    }
   }
