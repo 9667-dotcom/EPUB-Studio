@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>EPUB Studio Mobile v7.9.48</title>
+<title>EPUB Studio Mobile v7.9.49</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -138,7 +138,7 @@ window.addEventListener("unhandledrejection",function(e){
 </script>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v7.9.48</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본 · build 7.9.48</div></header>
+<header><h1>EPUB Studio Mobile v7.9.49</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본 · build 7.9.49</div></header>
 <main>
 
 <div id="buildMode">
@@ -426,7 +426,7 @@ XML·manifest·spine·내부 링크·ZIP 검사는 항상 실행되며, 실패�
 
 <section class="card">
 <h2>처리 상태</h2>
-<div id="status" class="status">v7.9.48 준비됨. 원본 파일을 선택하세요.</div>
+<div id="status" class="status">v7.9.49 준비됨. 원본 파일을 선택하세요.</div>
 <div id="result"></div>
 </section>
 
@@ -458,7 +458,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 </script>
 <script>
 "use strict";
-const APP_VERSION="7.9.48";
+const APP_VERSION="7.9.49";
 const $=id=>document.getElementById(id);
 let state={inputType:null,zip:null,originalBytes:null,opfPath:"",opfDir:"",opfDoc:null,manifest:new Map(),spine:[],candidates:[],groups:[],title:"",creator:"",navHref:null,ncxHref:null,txtFiles:[],coverCandidates:[],sourceCoverByGroup:new Map(),manualGrouping:false,epubUnits:[]};
 
@@ -803,14 +803,14 @@ function groupHeading(line){
  const br=/^[\[\(<【《〈「『]\s*(.+?)\s*[\]\)>】》〉」』]$/.exec(s);
  if(br){
   const inner=br[1].trim();
-  if(/^(?:제?\s*\d+\s*권|(?:외전|특별편|번외편?)\s*\d*\s*권|상위)/i.test(inner))return true;
+  if(/^(?:제?\s*\d+\s*(?:권|부)|(?:외전|특별편|번외편?)\s*\d*\s*권|상위)/i.test(inner))return true;
   // 대괄호/꺾쇠로 명시한 <외전> / [특별편] / <번외편>은 사용자가 의도한 상위 그룹으로 본다.
   if(/^(?:외전|특별편|번외편?)\s*\d*$/i.test(inner))return true;
   return false;
  }
  // 외전·특별편·번외편은 '권'이 붙어야(또는 위의 [권] 접두사) 볼륨으로 인식한다.
  // 그냥 '외전' / '외전 1'은 화 제목이므로 볼륨으로 빼지 않는다.
- return /^(?:제?\s*\d+\s*권(?:\s*\(\s*(?:(?:외전|특별편|번외편)\s*\d*|완결)\s*\))?|외전\s*\d*\s*권|특별편\s*\d*\s*권|번외편?\s*\d*\s*권|special\s*volume(?:\s*\d+)?|side\s*story\s*volume(?:\s*\d+)?)$/i.test(s)
+ return /^(?:제?\s*\d+\s*(?:권|부)(?:\s*\(\s*(?:(?:외전|특별편|번외편)\s*\d*|완결)\s*\))?|외전\s*\d*\s*권|특별편\s*\d*\s*권|번외편?\s*\d*\s*권|special\s*volume(?:\s*\d+)?|side\s*story\s*volume(?:\s*\d+)?)$/i.test(s)
 }
 
 function normalizeTitle(s){
@@ -1612,7 +1612,7 @@ function rebuildFlatTocDirectlyFromTxt(requestedLines){
  const files=availableTxtSources()
   .slice()
   .sort((a,b)=>compareVolumeInfo(a.volume||volumeInfoFromFilename(a.name),b.volume||volumeInfoFromFilename(b.name)));
- const groups=[],candidates=[],logs=[],matchedRequested=new Set();
+ const groups=[],candidates=[],logs=[],matchedRequestedCount=new Map();
  let candidateNo=0;
  // '순수 번호' 요청(1., 2., 15화 …)은 요청 목록에 나온 "횟수만큼만" 배정한다.
  // 범위(1.~7.)는 각 번호가 1번이라 한 번만, 사용자가 같은 번호를 여러 번 적으면 그만큼 여러 권에 배정.
@@ -1677,7 +1677,7 @@ function rebuildFlatTocDirectlyFromTxt(requestedLines){
     };
     candidates.push(candidate);
     group.chapters.push({title:cur.title,sourceId:id,requestedTitle:cur.requestedTitle});
-    matchedRequested.add(cur.requestedTitle);
+    matchedRequestedCount.set(cur.requestedTitle,(matchedRequestedCount.get(cur.requestedTitle)||0)+1);
     {const pn=requestedPureNumber(cur.requestedTitle);if(pn!=null)numberBudget.set(pn,(numberBudget.get(pn)||0)-1);}
     logs.push(`${cur.requestedTitle} → ${group.title} / ${cur.title}`);
    }
@@ -1685,7 +1685,13 @@ function rebuildFlatTocDirectlyFromTxt(requestedLines){
   }
  }
 
- const unmatched=requestedLines.filter(title=>!matchedRequested.has(title));
+ const consumedMatchedCount=new Map();
+ const unmatched=requestedLines.filter(title=>{
+  const used=consumedMatchedCount.get(title)||0;
+  const matched=matchedRequestedCount.get(title)||0;
+  if(used<matched){consumedMatchedCount.set(title,used+1);return false;}
+  return true;
+ });
  if(unmatched.length){
   groups.push({
    title:"미배정",
@@ -1753,12 +1759,18 @@ function expandFlatTocIntoOriginalVolumes(lines){
 function parseToc(text){
  const lines=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
  let groups=[],cur=null,currentContext=null;
+ const barePartLine=line=>/^(?:제\s*)?\d+\s*부$/i.test(String(line||"").normalize("NFKC").trim());
+ const numericVolumeTitle=title=>/^(?:제\s*)?\d+\s*권(?:\s*\(.*\))?$/i.test(String(title||"").normalize("NFKC").trim());
  for(let li=0;li<lines.length;li++){
   const line=lines[li];
-  if(groupHeading(line)){
+  // 구버전 호환: 최상위 1부/2부는 그룹으로 쓸 수 있다.
+  // 이미 1권 안에 있는 bare 1부/2부는 권 내부 Chapter/Part 문맥으로 유지한다.
+  const nestedBarePart=barePartLine(line)&&cur&&numericVolumeTitle(cur.title)&&!/^[\[<【《]/.test(line);
+  if(groupHeading(line)&&!nestedBarePart){
    const title=line.replace(/^\[(?:권|상위)\]\s*/i,"").replace(/^[\[\(<【《〈「『]\s*(.+?)\s*[\]\)>】》〉」』]$/,"$1").trim();
    cur={title,chapters:[],coverFile:null,coverMode:null,originalCoverHref:null};groups.push(cur);
-   if(!/^제?\s*\d+\s*권$/i.test(title))currentContext=null;
+   // 새 그룹 시작 시 이전 Chapter/Part 문맥을 반드시 초기화한다.
+   currentContext=null;
   }else{
    if(!cur){cur={title:"본문",chapters:[],coverFile:null,coverMode:null,originalCoverHref:null};groups.push(cur)}
    const ex=expandRangeToken(line);
@@ -3188,30 +3200,38 @@ function assignPastedGroupsPositionalByVolume(parsedGroups){
   const og={...g,chapters:[],coverFile:g.coverFile||null,coverMode:g.coverMode||"none",originalCoverHref:g.originalCoverHref||null};
   const pool=sv?sv.candidates:[];
   const used=new Set();let cursor=0;
-  const nextUnused=()=>{for(let i=cursor;i<pool.length;i++)if(!used.has(i))return i;return -1;};
+  const nextUnused=()=>{
+   for(let i=cursor;i<pool.length;i++)if(!used.has(i))return i;
+   for(let i=0;i<pool.length;i++)if(!used.has(i))return i;
+   return -1;
+  };
   g.chapters.forEach((ch)=>{
-   let bestIndex=-1,bestScore=-1;
-   for(let i=cursor;i<pool.length;i++){
+   // cursor 앞의 후보라도 제목이 확실히 맞으면 찾는다. 순서는 동점 해소 기준으로만 사용한다.
+   let bestIndex=-1,bestScore=-1,bestOrderPenalty=Infinity;
+   for(let i=0;i<pool.length;i++){
     if(used.has(i))continue;
     const sc=bodyPreferringScore(ch.title,pool[i]);
-    if(sc>bestScore){bestScore=sc;bestIndex=i;}
+    const penalty=i>=cursor?(i-cursor):(10000+cursor-i);
+    if(sc>bestScore+1e-9||(Math.abs(sc-bestScore)<1e-9&&penalty<bestOrderPenalty)){
+     bestScore=sc;bestIndex=i;bestOrderPenalty=penalty;
+    }
    }
    let pickedBy="제목";
    if(bestIndex<0||bestScore<0.78){bestIndex=nextUnused();pickedBy="순서 폴백";}
    const c=bestIndex>=0?pool[bestIndex]:null;
    if(c){
-    used.add(bestIndex);cursor=Math.max(cursor,bestIndex+1);
-    og.chapters.push({title:ch.title,sourceId:c.id,requestedTitle:ch.title});
+    used.add(bestIndex);if(bestIndex>=cursor)cursor=bestIndex+1;
+    og.chapters.push({title:ch.title,sourceId:c.id,requestedTitle:ch.title,contextLabel:ch.contextLabel||null});
     logs.push(`${g.title} / ${ch.title} → ${c.sourceVolume||""} ${c.title} [${pickedBy}${pickedBy==="제목"?` ${bestScore.toFixed(2)}`:""}]`);
    }else{
-    og.chapters.push({title:ch.title,sourceId:null});unmatched.push(`${g.title} / ${ch.title}`);
+    og.chapters.push({title:ch.title,sourceId:null,contextLabel:ch.contextLabel||null});unmatched.push(`${g.title} / ${ch.title}`);
    }
   });
-  // 붙여넣은 목차가 최우선: 남은 원본 후보는 자동으로 끼워 넣지 않고 검증에서 '미사용 본문'으로 알린다.
   out.push(og);
  });
  return {groups:out,logs,unmatched};
 }
+
 function assignExplicitGroupsGloballyFromCandidates(groups){
  const used=new Set();const logs=[],unmatched=[];
  // 후보를 원래 순서(index)로 정렬해 두고, 같은 점수(중복 제목 포함)일 때는
@@ -3832,15 +3852,25 @@ function naturalizeDetectedChapterOrder(chapters){
  return out;
 }
 function improvedMatchScore(tocTitle,candidate){
- const a=normalizeEmbeddedHeading(tocTitle),b=normalizeEmbeddedHeading(candidate?.title);
- if(!a||!b)return 0;if(a===b)return 1;
- if(supplementalTitleAliasMatch(candidate?.title,tocTitle))return .98;
- const an=chapterNumberToken(tocTitle),bn=chapterNumberToken(candidate?.title);
+ const sourceTitle=candidate?.title||"";
+ const a=normalizeEmbeddedHeading(tocTitle),b=normalizeEmbeddedHeading(sourceTitle);
+ if(!a||!b)return 0;
+ if(a===b)return 1;
+ if(supplementalTitleAliasMatch(sourceTitle,tocTitle))return .98;
+ // TXT/EPUB 공통 판정: 번호를 다시 매긴 'N. 제목'도 실제 제목이 같으면 매칭한다.
+ if(titleMatchesLoose(sourceTitle,tocTitle))return .96;
+ const an=chapterNumberToken(tocTitle),bn=chapterNumberToken(sourceTitle);
  if(an!==null&&bn!==null)return an===bn?.99:0;
- let score=similarity(tocTitle,candidate?.title);
+ // 날짜처럼 문자 골격은 같고 숫자열만 다른 제목은 유사도로 오배정하지 않는다.
+ const digits=v=>(String(v||"").match(/\d+/g)||[]).map(Number).join(",");
+ const stem=v=>normalizeTitle(String(v||"").replace(/\d+/g,""));
+ const ad=digits(tocTitle),bd=digits(sourceTitle),as=stem(tocTitle),bs=stem(sourceTitle);
+ if(ad&&bd&&ad!==bd&&as&&bs&&as===bs)return 0;
+ let score=similarity(tocTitle,sourceTitle);
  if(a.includes(b)||b.includes(a))score=Math.max(score,.82);
  return Math.min(1,score);
 }
+
 function isStructuralOnlyTitle(title){
  return /^(?:프롤로그|prologue|에필로그|epilogue|후기|후일담|서장|종장|막간|interlude|외전|특별편|번외편?|special|side\s*story|after\s*story)$/i.test(String(title||"").trim());
 }
