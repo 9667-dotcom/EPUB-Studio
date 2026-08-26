@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>EPUB Studio Mobile v8.1.2</title>
+<title>EPUB Studio Mobile v8.1.4</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -140,7 +140,7 @@ window.addEventListener("unhandledrejection",function(e){
 </script>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v8.1.2</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본 · build 8.1.2</div></header>
+<header><h1>EPUB Studio Mobile v8.1.4</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본 · build 8.1.4</div></header>
 <main>
 
 <div id="buildMode">
@@ -422,7 +422,7 @@ XML·manifest·spine·내부 링크·ZIP 검사는 항상 실행되며, 실패�
 
 <section class="card">
 <h2>처리 상태</h2>
-<div id="status" class="status">v8.1.2 준비됨. 원본 파일을 선택하세요.</div>
+<div id="status" class="status">v8.1.4 준비됨. 원본 파일을 선택하세요.</div>
 <div id="result"></div>
 </section>
 
@@ -727,6 +727,10 @@ function stripHtml(x){
 }
 function titleFromXhtml(text,href){
  const deco=/^[\s*＊✱﹡·・．.\-–—_=~＝◇◆○●□■▪▫☆★♠♣♥❖◈\u2022\u2026]+$/;
+ const decodeEnt=s=>String(s).replace(/&nbsp;|&#160;|&#xa0;/gi," ").replace(/&lt;/gi,"<").replace(/&gt;/gi,">").replace(/&amp;/gi,"&").replace(/&quot;/gi,'"').replace(/&#39;|&apos;/gi,"'");
+ // 제목 앞에 붙는 장 번호 표식(<2>, ＜2＞, [2], (2), 【2】)을 떼어낸다.
+ const stripNum=s=>String(s).replace(/^\s*[<＜(［【〈]\s*\d+\s*[>＞)］】〉]\s*/,"").trim();
+ const cleanBody=s=>stripNum(decodeEnt(s).replace(/\s+/g," ").trim());
  try{
   const d=parseXML(text,"XHTML");
   const scope=firstDesc(d,"body")||d;
@@ -749,7 +753,7 @@ function titleFromXhtml(text,href){
   // 'Unknown/알 수 없음/제목 없음' 같은 placeholder면 건너뛴다.
   const titleEl=descendants(d,"title")[0];
   if(titleEl){const t=titleEl.textContent.trim();if(t&&!/^[a-z0-9]{5,12}$/i.test(t)&&!/^(?:알\s*수\s*없음|unknown|untitled|무제|제목\s*없음|no\s*title|cover|표지)$/i.test(t))return t;}
-  const body=firstDesc(d,"body"); if(body){const t=(body.textContent||"").replace(/\s+/g," ").trim(); if(t)return t.slice(0,45)}
+  const body=firstDesc(d,"body"); if(body){const t=cleanBody(body.textContent||""); if(t)return t.slice(0,45)}
  }catch(e){
   // XML 파싱이 실패해도(칼리브레 본문에 XML 오류가 흔함) 정규식으로 제목을 뽑는다.
   try{
@@ -761,7 +765,7 @@ function titleFromXhtml(text,href){
    const tm=src.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
    if(tm){const t=tm[1].replace(/\s+/g," ").trim();if(t&&!/^[a-z0-9]{5,12}$/i.test(t)&&!/^(?:알\s*수\s*없음|unknown|untitled|무제|제목\s*없음|no\s*title|cover|표지)$/i.test(t))return t.slice(0,120);}
    const bm=src.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-   if(bm){const t=bm[1].replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim();if(t)return t.slice(0,45);}
+   if(bm){const t=cleanBody(bm[1].replace(/<[^>]+>/g," "));if(t)return t.slice(0,45);}
   }catch(_){}
  }
  return href.split("/").pop()
@@ -2747,15 +2751,39 @@ function classifyUnitSections(unit){
  return sections;
 }
 // 선택 맵(포함=true)에 따라 합본 본문 후보를 만든다. 중복 본문은 첫 번째만 남긴다.
+function planTitleBodyMerge(unit,selections){
+ // 칼리브레 분할본처럼 '제목만 있는 작은 페이지' + '본문 페이지'가 따로인 구조를 하나의 화로 합친다.
+ // 제목 페이지는 후보에서 빼고, 그 제목을 다음 본문 화의 제목으로 넘긴다(본문 상단에 헤딩으로 삽입됨).
+ const dropTitle=new Set(),bodyTitle=new Map();
+ const included=(unit.sections||[]).filter(s=>selections.get(`${unit.index}::${s.href}`)!==false);
+ const plain=s=>String(s&&s.content||"").replace(/<(style|script)[\s\S]*?<\/\1>/gi," ").replace(/<[^>]+>/g," ").replace(/&nbsp;|&#160;|&#xa0;/gi," ").replace(/\s+/g,"").trim();
+ const clean=t=>String(t||"").replace(/^\s*[<＜(［【〈]\s*\d+\s*[>＞)］】〉]\s*/,"").trim();
+ for(let i=0;i<included.length-1;i++){
+  const s=included[i],nx=included[i+1];
+  if(dropTitle.has(s.fullPath)||bodyTitle.has(nx.fullPath))continue;
+  const t=clean(s.title),sp=plain(s),np=plain(nx);
+  if(t&&t.length<=40&&sp.length<=Math.max(30,t.replace(/\s/g,"").length+6)&&np.length>=800
+     &&!isVolumeHeadingLine(t)&&!isPartHeadingLine(t)){
+   dropTitle.add(s.fullPath);bodyTitle.set(nx.fullPath,t);
+  }
+ }
+ return {dropTitle,bodyTitle};
+}
 function buildCollectionCandidates(units,selections){
  const candidates=[];let ci=0;const cleanupRemoved=[],dedupRemoved=[],seen=new Map();
  for(const unit of units){
   unit.skipXhtml=new Set();
+  const merge=planTitleBodyMerge(unit,selections);
   for(const s of unit.sections){
    const key=`${unit.index}::${s.href}`;
    if(selections.get(key)===false){
     unit.skipXhtml.add(s.fullPath);
     cleanupRemoved.push({name:unit.name,title:s.title,href:s.href,reason:s.reason||"사용자 제외"});
+    continue;
+   }
+   if(merge.dropTitle.has(s.fullPath)){
+    // 제목 전용 페이지: 별도 화로 만들지 않고 다음 본문 화에 제목만 넘긴다(파일도 복사 안 함).
+    unit.skipXhtml.add(s.fullPath);
     continue;
    }
    const dupKey=$("removeDuplicateContent")?.checked!==false?contentDedupKey(s.content):null;
@@ -2765,7 +2793,8 @@ function buildCollectionCandidates(units,selections){
     continue;
    }
    const outputHref=`${unit.folder}/${s.fullPath}`;
-   const c={id:`epubset_${unit.index}_${s.originalId}_${ci}`,href:outputHref,media:s.media,title:s.title,index:ci++,linear:"yes",sourceFile:unit.name,sourceVolume:unit.volume.label,unitIndex:unit.index,originalId:s.originalId,originalHref:s.href,content:s.content,sourceKind:"epub"};
+   const mergedTitle=merge.bodyTitle.get(s.fullPath)||s.title;
+   const c={id:`epubset_${unit.index}_${s.originalId}_${ci}`,href:outputHref,media:s.media,title:mergedTitle,index:ci++,linear:"yes",sourceFile:unit.name,sourceVolume:unit.volume.label,unitIndex:unit.index,originalId:s.originalId,originalHref:s.href,content:s.content,sourceKind:"epub"};
    candidates.push(c);if(dupKey)seen.set(dupKey,c);
   }
  }
@@ -4760,17 +4789,18 @@ async function mergeEmptyChapterPartPages(zip){
   const c=body.cloneNode(true),hh=firstDesc(c,"h1");if(hh)hh.parentNode.removeChild(hh);
   const ownText=(c.textContent||"").replace(/\s+/g,"").trim(),ownMedia=descendants(c,"img").length+descendants(c,"svg").length;
   if(ownText||ownMedia)continue; // 자체 본문이 있는 Chapter/Part는 독립 XHTML 유지.
+  const titleForMerge=title;
   const next=rows.slice(i+1).find(r=>r.it&&r.it.getAttribute("media-type")==="application/xhtml+xml"&&zipFileAt(zip,r.path));
-  if(!next)throw new Error(`'${title}' 뒤에 결합할 첫 하위 화가 없습니다.`);
+  if(!next)throw new Error(`'${titleForMerge}' 뒤에 결합할 첫 하위 화가 없습니다.`);
   const nd=parseXML(await zipFileAt(zip,next.path).async("text"),"Chapter/Part 첫 하위 화"),nb=firstDesc(nd,"body");
-  if(!nb)throw new Error(`'${title}'의 첫 하위 화 XHTML에 body가 없습니다.`);
+  if(!nb)throw new Error(`'${titleForMerge}'의 첫 하위 화 XHTML에 body가 없습니다.`);
   const nextH1=firstDesc(nb,"h1"),nextTitle=(nextH1?.textContent||"").trim();
   if(isVolumeHeadingLine(nextTitle)||isPartHeadingLine(nextTitle)||isChapterContextTitle(nextTitle)){
-   throw new Error(`'${title}' 뒤에 실제 하위 화가 없어 다른 구조 페이지(${nextTitle||"제목 없음"})와 잘못 결합될 위험이 있습니다.`);
+   throw new Error(`'${titleForMerge}' 뒤에 실제 하위 화가 없어 다른 구조 페이지(${nextTitle||"제목 없음"})와 잘못 결합될 위험이 있습니다.`);
   }
-  const anchorId="hm-context-"+hmCtxSlug(title)+"-"+(i+1);
+  const anchorId="hm-context-"+hmCtxSlug(titleForMerge)+"-"+(i+1);
   const ctx=nd.createElementNS("http://www.w3.org/1999/xhtml","h1");
-  ctx.setAttribute("class","chapter-context-title");ctx.setAttribute("id",anchorId);ctx.appendChild(nd.createTextNode(title));
+  ctx.setAttribute("class","chapter-context-title");ctx.setAttribute("id",anchorId);ctx.appendChild(nd.createTextNode(titleForMerge));
   nb.insertBefore(ctx,nb.firstChild);
   zip.file(next.path,serializeXML(nd));
   for(const navPath of Object.keys(zip.files).filter(p=>/(?:nav\.xhtml|\.ncx)$/i.test(p))){
