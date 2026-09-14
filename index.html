@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>EPUB Studio Mobile v8.4.9</title>
+<title>EPUB Studio Mobile v8.5.0</title>
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#202124;background:#f5f6f8}
 *{box-sizing:border-box} body{margin:0} header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #ddd;padding:14px 16px}
@@ -140,7 +140,7 @@ window.addEventListener("unhandledrejection",function(e){
 </script>
 </head>
 <body>
-<header><h1>EPUB Studio Mobile v8.4.9</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본 · build 8.4.9</div></header>
+<header><h1>EPUB Studio Mobile v8.5.0</h1><div class="sub">CSS 보존 우선 · TXT·EPUB·다권 EPUB ZIP 합본 · build 8.5.0</div></header>
 <main>
 
 <div id="buildMode">
@@ -428,7 +428,7 @@ XML·manifest·spine·내부 링크·ZIP 검사는 항상 실행되며, 실패�
 
 <section class="card">
 <h2>처리 상태</h2>
-<div id="status" class="status">v8.4.9 준비됨. 원본 파일을 선택하세요.</div>
+<div id="status" class="status">v8.5.0 준비됨. 원본 파일을 선택하세요.</div>
 <div id="result"></div>
 </section>
 
@@ -1493,10 +1493,10 @@ function volumeSectionsOfFile(file,lines,requestedTitles,volumeTitles){
 }
 function findRequestedHeadingsInTxt(file,requestedLines){
  const lines=normalizeTxt(file.text).split("\n");
- const tocRange=detectInternalTocRange(lines);
+ const tocRanges=internalTocRanges(lines);
  const found=[];
  for(let i=0;i<lines.length;i++){
-  if(tocRange&&i>=tocRange.start&&i<tocRange.end)continue;
+  if(inTocRanges(tocRanges,i))continue;
   const raw=lines[i].trim();
   if(!raw||raw.length>180)continue;
   const requested=requestedLines.find(title=>titleMatchesLoose(raw,title));
@@ -1618,14 +1618,14 @@ function rebuildExplicitTocGloballyFromTxt(parsedGroups){
  const volumeOpenings=[];
  for(const file of files){
   const lines=normalizeTxt(file.text).split("\n");
-  const tocRange=detectInternalTocRange(lines);
+  const tocRanges=internalTocRanges(lines);
   const partMarks=findPartMarkersInText(lines);
   const chapterMarks=findChapterContextMarkers(lines);
   const sections=volumeSectionsOfFile(file,lines,requestedTitles,volumeTitles);
   for(const sec of sections){
    const markers=[];
    for(let i=sec.start;i<sec.end;i++){
-    if(tocRange&&i>=tocRange.start&&i<tocRange.end)continue;
+    if(inTocRanges(tocRanges,i))continue;
     const raw=lines[i].trim().replace(/_\d{2,}\s*$/,"");
     if(!raw||raw.length>180)continue;
     // 대사 줄(따옴표로 시작·끝)은 화 제목이 아니다. 본문 속 대사가 목차 제목과 느슨히 일치해 가짜 화가 되는 것을 막는다.
@@ -1924,13 +1924,13 @@ function rebuildFlatTocDirectlyFromTxt(requestedLines){
 
  for(const file of files){
   const textLines=normalizeTxt(file.text).split("\n");
-  const tocRange=detectInternalTocRange(textLines);
+  const tocRanges=internalTocRanges(textLines);
   const sections=volumeSectionsOfFile(file,textLines);
   for(const sec of sections){
    // 이 권 섹션 안에서 요청된 제목이 나타나는 줄(마커)만 수집. 내부 목차 구간은 건너뛴다.
    const secMarkers=[];
    for(let i=sec.start;i<sec.end;i++){
-    if(tocRange&&i>=tocRange.start&&i<tocRange.end)continue;
+    if(inTocRanges(tocRanges,i))continue;
     const raw=textLines[i].trim();
     if(!raw||raw.length>180)continue;
     const req=requestedLines.find(title=>titleMatchesLoose(raw,title));
@@ -2257,7 +2257,7 @@ function normalizeEmbeddedHeading(value){
 
 function candidateBodyScore(lines,index,title,tocRange,previousIndex,nextTitle){
  let score=0;
- if(tocRange&&index>=tocRange.start&&index<tocRange.end)score-=100;
+ if(inTocRanges(tocRange,index))score-=100;
  if(lineLooksLikeBody(lines,index))score+=35;
  const after=lines.slice(index+1,Math.min(lines.length,index+20)).map(x=>x.trim()).filter(Boolean);
  const proseChars=after.reduce((n,x)=>n+x.length,0);
@@ -2299,6 +2299,19 @@ function nextNonBlankIsProse(lines,i){
  }
  return false;
 }
+function internalTocRanges(lines){
+ // 파일 안에 '목차' 블록이 여러 번(권마다) 반복되는 경우, 모든 목차 구간을 찾는다.
+ const ranges=[];let from=0;let guard=0;
+ while(from<lines.length&&guard++<50){
+  const sub=lines.slice(from);
+  const r=detectInternalTocRange(sub);
+  if(!r||r.end<=0)break;
+  ranges.push({start:r.start+from,end:r.end+from});
+  from=from+r.end;
+ }
+ return ranges;
+}
+function inTocRanges(ranges,i){if(!ranges)return false;const arr=Array.isArray(ranges)?ranges:[ranges];for(const r of arr)if(r&&i>=r.start&&i<r.end)return true;return false;}
 function detectInternalTocRange(lines){
  const tocStart=lines.findIndex(isTocHeaderLine);
  if(tocStart<0)return null;
@@ -2472,13 +2485,13 @@ function rebuildTxtCandidatesFromPastedGroups(groups){
   }
   usedFiles.add(file.name);
   const lines=normalizeTxt(file.text).split("\n");
-  const tocRange=detectInternalTocRange(lines);
+  const tocRanges=internalTocRanges(lines);
   const found=[];
-  let cursor=tocRange?tocRange.end:0;
+  let cursor=tocRanges.length?tocRanges[0].end:0;
 
   for(const chapter of group.chapters){
    const nextTitle=group.chapters[group.chapters.indexOf(chapter)+1]?.title||null;
-   const lineIndex=findHeadingLineSequential(lines,chapter.title,cursor,tocRange,nextTitle);
+   const lineIndex=findHeadingLineSequential(lines,chapter.title,cursor,tocRanges,nextTitle);
    if(lineIndex<0){
     found.push({chapter,lineIndex:-1});
     unmatched++;
@@ -2512,7 +2525,7 @@ function rebuildTxtCandidatesFromPastedGroups(groups){
     content,
     sourceFile:file.name,
     sourceVolume:(file.volume||volumeInfoFromFilename(file.name)).label,
-    detectedBy:tocRange?"pasted-toc-skip-internal":"pasted-toc",
+    detectedBy:tocRanges.length?"pasted-toc-skip-internal":"pasted-toc",
     sourceLine:item.lineIndex,
     sourceKind:"txt"
    };
